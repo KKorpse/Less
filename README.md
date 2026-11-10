@@ -25,7 +25,7 @@
 - 专注页左下角是一个圆形收藏按钮（桃心），右下角是一个圆形撤回按钮（返回箭头），都不带文字
 - 撤回按钮恢复最近一次标记，而不是立即操作系统删除
 - 中间信息气泡与两侧圆按钮等高，两行内容：
-  - 第一行加粗：`当前序号 / 组内总数 · 相对时间`
+  - 第一行加粗：相对时间（今天 / N 天前 / N 周前 / N 个月前 / N 年前）
   - 第二行小一号灰色：照片拍摄地址
 - 地址来自照片 EXIF GPS，首次进入照片专注时会请求一次位置权限
 - 没有 GPS 时显示「未记录拍摄地点」；无法反查地址时回退为坐标
@@ -85,7 +85,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.0.3（versionCode 5） |
+| 当前版本 | 2.0.4（versionCode 6） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -107,7 +107,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.0.3-debug.apk
+app/build/outputs/apk/debug/Less-v2.0.4-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -118,13 +118,14 @@ dist/Less-v2.0.0-debug.apk
 dist/Less-v2.0.1-debug.apk
 dist/Less-v2.0.2-debug.apk
 dist/Less-v2.0.3-debug.apk
+dist/Less-v2.0.4-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.0.3-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.0.4-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -158,7 +159,7 @@ dist/SHA256SUMS.txt
   - 连续上滑标记 3 张不弹系统框，不再卡在第二张
   - 组尾汇总页显示待删除数量和缩略图
   - 一次系统确认批量删除 3 张；汇总页撤回后批量恢复
-  - 圆形收藏/撤回按钮、双行信息气泡、地址 fallback
+  - 圆形收藏/撤回按钮、双行信息气泡（时间 + 地址）、地址 fallback
   - 视频流自动播放、上下滑动、右侧收藏/删除/撤回
   - 收藏页照片/视频
   - 统计总数/已查看/已删除、重置浏览记录

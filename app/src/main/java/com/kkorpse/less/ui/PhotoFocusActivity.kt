@@ -306,12 +306,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     }
 
     private fun updateInfo(page: FocusPage.Photo) {
-        binding.infoTitle.text = getString(
-            R.string.info_position_time,
-            page.originalIndex + 1,
-            viewModel.groupSize,
-            Format.relativeTime(page.item.dateMillis)
-        )
+        binding.infoTitle.text = Format.relativeTime(page.item.dateMillis)
         binding.infoAddress.text = getString(R.string.location_loading)
 
         locationJob?.cancel()

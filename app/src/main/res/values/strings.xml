@@ -29,7 +29,6 @@
     <string name="unfavorite_content_desc">取消收藏</string>
     <string name="undo_content_desc">撤回上一张删除标记</string>
 
-    <string name="info_position_time">%1$d / %2$d · %3$s</string>
     <string name="location_loading">正在读取拍摄地点…</string>
     <string name="location_unknown">未记录拍摄地点</string>
     <string name="location_permission_missing">未授权读取拍摄地点</string>
