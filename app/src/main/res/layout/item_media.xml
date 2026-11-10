@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<com.kkorpse.less.ui.SquareFrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:layout_margin="2dp"
+    android:clickable="true"
+    android:focusable="true"
+    android:foreground="?attr/selectableItemBackground">
+
+    <com.google.android.material.imageview.ShapeableImageView
+        android:id="@+id/thumb"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:contentDescription="@null"
+        android:scaleType="centerCrop"
+        app:shapeAppearanceOverlay="@style/ShapeAppearance.Less.Thumb" />
+
+    <ImageView
+        android:id="@+id/videoPlay"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_gravity="center"
+        android:background="@drawable/bg_play_circle"
+        android:contentDescription="@string/play_video"
+        android:padding="9dp"
+        android:src="@drawable/ic_play"
+        app:tint="@color/accent"
+        android:visibility="gone" />
+
+    <TextView
+        android:id="@+id/videoDuration"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="6dp"
+        android:background="@drawable/bg_duration"
+        android:fontFamily="sans-serif-medium"
+        android:includeFontPadding="false"
+        android:paddingStart="6dp"
+        android:paddingTop="3dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="3dp"
+        android:textColor="@color/accent"
+        android:textSize="11sp"
+        android:visibility="gone" />
+</com.kkorpse.less.ui.SquareFrameLayout>
