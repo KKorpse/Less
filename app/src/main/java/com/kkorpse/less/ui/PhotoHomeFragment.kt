@@ -22,7 +22,6 @@ import coil3.load
 import coil3.request.crossfade
 import coil3.request.error
 import coil3.request.placeholder
-import com.google.android.material.imageview.ShapeableImageView
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaItem
@@ -178,13 +177,14 @@ class PhotoHomeFragment : Fragment() {
         applyCardTransform(binding.cardLeft, -1f)
         applyCardTransform(binding.cardRight, 1f)
         binding.cardCenter.translationX = 0f
-        binding.cardCenter.translationY = 0f
+        binding.cardCenter.translationY = -requireContext().dp(8).toFloat()
+        binding.cardCenter.rotation = 0f
     }
 
-    private fun bindCard(card: ShapeableImageView, item: MediaItem, index: Int) {
+    private fun bindCard(card: FanCardView, item: MediaItem, index: Int) {
         card.tag = index
         card.contentDescription = item.name
-        card.load(item.uri) {
+        card.imageView.load(item.uri) {
             crossfade(150)
             placeholder(R.drawable.bg_thumb_placeholder)
             error(R.drawable.bg_thumb_error)
@@ -193,12 +193,11 @@ class PhotoHomeFragment : Fragment() {
         card.setOnClickListener { openFocus(index) }
     }
 
-    private fun applyCardTransform(card: ShapeableImageView, direction: Float) {
-        val offsetX = resources.getDimensionPixelSize(R.dimen.photo_card_offset)
-        val offsetY = resources.getDimensionPixelSize(R.dimen.photo_card_offset_y)
-        card.translationX = direction * offsetX
-        card.translationY = direction * offsetY
-        card.rotation = 0f
+    private fun applyCardTransform(card: FanCardView, direction: Float) {
+        val offset = resources.getDimensionPixelSize(R.dimen.photo_card_offset)
+        card.translationX = direction * offset
+        card.translationY = requireContext().dp(8).toFloat()
+        card.rotation = direction * 9f
     }
 
     private fun openFocus(index: Int) {

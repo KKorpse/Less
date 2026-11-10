@@ -111,9 +111,11 @@
             <FrameLayout
                 android:id="@+id/cardStack"
                 android:layout_width="@dimen/photo_stack_width"
-                android:layout_height="@dimen/photo_stack_height">
+                android:layout_height="@dimen/photo_stack_height"
+                android:clipChildren="false"
+                android:clipToPadding="false">
 
-                <com.google.android.material.imageview.ShapeableImageView
+                <com.kkorpse.less.ui.FanCardView
                     android:id="@+id/cardLeft"
                     android:layout_width="@dimen/photo_card_width"
                     android:layout_height="@dimen/photo_card_height"
@@ -121,12 +123,9 @@
                     android:clickable="true"
                     android:elevation="8dp"
                     android:focusable="true"
-                    android:scaleType="centerCrop"
-                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Less.PhotoCard"
-                    app:strokeColor="@color/accent"
-                    app:strokeWidth="3dp" />
+                    android:rotation="-9" />
 
-                <com.google.android.material.imageview.ShapeableImageView
+                <com.kkorpse.less.ui.FanCardView
                     android:id="@+id/cardRight"
                     android:layout_width="@dimen/photo_card_width"
                     android:layout_height="@dimen/photo_card_height"
@@ -134,23 +133,16 @@
                     android:clickable="true"
                     android:elevation="8dp"
                     android:focusable="true"
-                    android:scaleType="centerCrop"
-                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Less.PhotoCard"
-                    app:strokeColor="@color/accent"
-                    app:strokeWidth="3dp" />
+                    android:rotation="9" />
 
-                <com.google.android.material.imageview.ShapeableImageView
+                <com.kkorpse.less.ui.FanCardView
                     android:id="@+id/cardCenter"
                     android:layout_width="@dimen/photo_card_width"
                     android:layout_height="@dimen/photo_card_height"
                     android:layout_gravity="center"
                     android:clickable="true"
                     android:elevation="16dp"
-                    android:focusable="true"
-                    android:scaleType="centerCrop"
-                    app:shapeAppearanceOverlay="@style/ShapeAppearance.Less.PhotoCard"
-                    app:strokeColor="@color/accent"
-                    app:strokeWidth="3dp" />
+                    android:focusable="true" />
             </FrameLayout>
         </LinearLayout>
 

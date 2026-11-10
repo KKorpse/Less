@@ -4,15 +4,15 @@
 
 2.1 版本把照片、视频、统计收敛成**同一个首页的三个模式**：底部是悬浮胶囊导航，照片模式直接展示三张扑克牌，视频模式点一下就直接进入刷视频，不再额外打开新页面。
 
-2.2 版本继续打磨照片浏览：一组看完自动进入下一组；照片按原始比例装进圆角卡片，竖屏 2:3 时横向照片的上下空区会自动铺上照片整体色调；底部胶囊导航再压低 1/3，并给 tab 切换加了淡入淡出动效。2.2.1 继续收小圆角、放大图片可用区域，并让缩放时整张图（连同圆角）一起放大，同时把首页三张卡片改成竖直叠放。
+2.2 版本继续打磨照片浏览：一组看完自动进入下一组；照片按原始比例装进圆角卡片，竖屏 2:3 时横向照片的上下空区会自动铺上照片整体色调；底部胶囊导航再压低 1/3，并给 tab 切换加了淡入淡出动效。2.2.1 继续收小圆角、放大图片可用区域，并让缩放时整张图（连同圆角）一起放大；2.2.2 把首页恢复成三张扑克牌展开的样式，并用单一路径重画卡片圆角与白边。
 
 ## 功能
 
 ### 首页
 
 - 只有一个主页面，底部悬浮胶囊：**照片 / 视频 / 统计**
-- 胶囊高度 34dp，三个模式按钮之间留出间距；三个模式切换使用淡出/淡入动效，照片卡片进入时带轻微缩放淡入
-- 照片模式的三张卡片改为竖直叠放：左右各错开一点、上下错开一点，不做旋转，圆角干净无锯齿
+- 胶囊高度 44dp；三个模式切换使用淡出/淡入动效，照片卡片进入时带轻微缩放淡入
+- 照片模式的三张卡片像扑克牌一样左右展开，左右各倾斜 9°；卡片底板、照片裁剪和白边共用同一条圆角路径，旋转后不会出现双线或锯齿
 - 照片模式：
   - 左上角是「照片 + 数量」胶囊
   - 右上角是收藏、设置圆形入口
@@ -95,7 +95,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.2.1（versionCode 10） |
+| 当前版本 | 2.2.2（versionCode 11） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -118,7 +118,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.2.1-debug.apk
+app/build/outputs/apk/debug/Less-v2.2.2-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -134,13 +134,14 @@ dist/Less-v2.1.0-debug.apk
 dist/Less-v2.1.1-debug.apk
 dist/Less-v2.2.0-debug.apk
 dist/Less-v2.2.1-debug.apk
+dist/Less-v2.2.2-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.1-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.2-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -178,7 +179,8 @@ dist/SHA256SUMS.txt
   - 2:3 竖屏（1680×2520）测试：方图抵满左右、横图按比例居中、上下空区使用照片色调
   - 照片缩放：整张图连同圆角一起放大，不再出现固定画框
   - 一组看完自动进入下一组
-  - 首页三张卡片竖直错位叠放；底部胶囊导航更小且按钮之间有间距
+  - 首页三张卡片左右展开、倾斜叠放，圆角单线白边
+  - 底部胶囊导航保持原来的 44dp 大小
   - 收藏页照片/视频、设置页
 
 ## 项目结构
@@ -213,6 +215,7 @@ app/src/main/java/com/kkorpse/less/
 │   ├── ViewerAdapter.kt
 │   ├── GalleryAdapter.kt
 │   ├── FocusCardLayout.kt
+│   ├── FanCardView.kt               # 首页扑克牌卡片（圆角 + 白边）
 │   ├── SquareFrameLayout.kt
 │   └── TrashController.kt
 └── util/
