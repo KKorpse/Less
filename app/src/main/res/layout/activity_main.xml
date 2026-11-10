@@ -14,17 +14,17 @@
     <LinearLayout
         android:id="@+id/bottomNav"
         android:layout_width="wrap_content"
-        android:layout_height="44dp"
+        android:layout_height="34dp"
         android:layout_gravity="bottom|center_horizontal"
         android:layout_marginBottom="@dimen/float_nav_bottom_margin"
         android:background="@drawable/bg_float_nav"
         android:gravity="center"
         android:orientation="horizontal"
-        android:padding="3dp">
+        android:padding="2dp">
 
         <LinearLayout
             android:id="@+id/navPhotos"
-            android:layout_width="84dp"
+            android:layout_width="64dp"
             android:layout_height="match_parent"
             android:background="@drawable/bg_nav_item"
             android:clickable="true"
@@ -33,8 +33,8 @@
             android:orientation="vertical">
 
             <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_photo"
                 app:tint="@color/nav_item_tint" />
@@ -42,18 +42,19 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="1dp"
                 android:fontFamily="sans-serif-medium"
                 android:includeFontPadding="false"
                 android:text="@string/home_photos"
                 android:textColor="@color/nav_item_text"
-                android:textSize="9sp" />
+                android:textSize="8sp" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/navVideos"
-            android:layout_width="84dp"
+            android:layout_width="64dp"
             android:layout_height="match_parent"
+            android:layout_marginStart="6dp"
             android:background="@drawable/bg_nav_item"
             android:clickable="true"
             android:focusable="true"
@@ -61,8 +62,8 @@
             android:orientation="vertical">
 
             <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_video"
                 app:tint="@color/nav_item_tint" />
@@ -70,18 +71,19 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="1dp"
                 android:fontFamily="sans-serif-medium"
                 android:includeFontPadding="false"
                 android:text="@string/home_videos"
                 android:textColor="@color/nav_item_text"
-                android:textSize="9sp" />
+                android:textSize="8sp" />
         </LinearLayout>
 
         <LinearLayout
             android:id="@+id/navStats"
-            android:layout_width="84dp"
+            android:layout_width="64dp"
             android:layout_height="match_parent"
+            android:layout_marginStart="6dp"
             android:background="@drawable/bg_nav_item"
             android:clickable="true"
             android:focusable="true"
@@ -89,8 +91,8 @@
             android:orientation="vertical">
 
             <ImageView
-                android:layout_width="18dp"
-                android:layout_height="18dp"
+                android:layout_width="14dp"
+                android:layout_height="14dp"
                 android:contentDescription="@null"
                 android:src="@drawable/ic_chart"
                 app:tint="@color/nav_item_tint" />
@@ -98,12 +100,12 @@
             <TextView
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:layout_marginTop="2dp"
+                android:layout_marginTop="1dp"
                 android:fontFamily="sans-serif-medium"
                 android:includeFontPadding="false"
                 android:text="@string/home_stats"
                 android:textColor="@color/nav_item_text"
-                android:textSize="9sp" />
+                android:textSize="8sp" />
         </LinearLayout>
     </LinearLayout>
 

@@ -1,13 +1,10 @@
 package com.kkorpse.less.ui
 
 import android.view.GestureDetector
-import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.view.ViewOutlineProvider
-import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -28,7 +25,6 @@ import com.kkorpse.less.databinding.ItemGroupSummaryBinding
 import com.kkorpse.less.databinding.ItemPhotoFocusBinding
 import com.kkorpse.less.prefs.DoubleTapAction
 import com.kkorpse.less.util.dp
-import kotlin.math.roundToInt
 
 class PhotoFocusAdapter(
     private val doubleTapAction: DoubleTapAction,
@@ -43,6 +39,20 @@ class PhotoFocusAdapter(
         private const val TYPE_PHOTO = 0
         private const val TYPE_SUMMARY = 1
         private const val MAX_SUMMARY_THUMBS = 6
+    }
+
+    private var contentTop = 0
+    private var contentBottom = 0
+
+    /**
+     * 照片可用的上下留白：顶部让出状态栏，底部让出收藏/时间/撤回这一排，
+     * 让竖长图能一直长到按钮上方。
+     */
+    fun setContentInsets(top: Int, bottom: Int) {
+        if (top == contentTop && bottom == contentBottom) return
+        contentTop = top
+        contentBottom = bottom
+        notifyDataSetChanged()
     }
 
     override fun getItemViewType(position: Int): Int = when (getItem(position)) {
@@ -79,9 +89,11 @@ class PhotoFocusAdapter(
     ) : RecyclerView.ViewHolder(binding.root) {
 
         init {
-            binding.card.clipToOutline = true
-            binding.card.outlineProvider = ViewOutlineProvider.BACKGROUND
             binding.card.photoView = binding.photo
+            // 缩放/拖动时让圆角裁剪跟随图片重绘，否则硬件层会沿用 1x 时的裁剪框。
+            binding.photo.setOnMatrixChangeListener {
+                binding.card.invalidate()
+            }
         }
 
         fun bind(item: MediaItem) {
@@ -94,28 +106,11 @@ class PhotoFocusAdapter(
             binding.photo.setScale(1f, false)
             binding.photo.setZoomable(true)
 
-            // 按照片比例决定卡片尺寸：横向照片在竖屏上不会被黑边撑满，
-            // 空白区域由当前照片的整页背景色填充。
+            // 图片可用区域：左右几乎贴边，上到状态栏下沿，下到收藏/时间/撤回上方。
+            // PhotoView 在这块区域里按比例 fitCenter：方图抵满左右，长图抵满上下。
             val context = binding.root.context
-            val dm = context.resources.displayMetrics
-            val maxWidth = (dm.widthPixels - context.dp(64)).coerceAtLeast(context.dp(160))
-            val maxHeight = (dm.heightPixels - context.dp(220)).coerceAtLeast(context.dp(160))
-            val ratio = if (item.width > 0 && item.height > 0) {
-                item.width.toFloat() / item.height.toFloat()
-            } else {
-                maxWidth.toFloat() / maxHeight.toFloat()
-            }
-            var cardWidth = maxWidth.toFloat()
-            var cardHeight = cardWidth / ratio
-            if (cardHeight > maxHeight) {
-                cardHeight = maxHeight.toFloat()
-                cardWidth = cardHeight * ratio
-            }
-            binding.card.layoutParams = FrameLayout.LayoutParams(
-                cardWidth.roundToInt(),
-                cardHeight.roundToInt(),
-                Gravity.CENTER
-            )
+            val sidePadding = context.dp(12)
+            binding.root.setPadding(sidePadding, contentTop, sidePadding, contentBottom)
             binding.photo.setOnDoubleTapListener(object : GestureDetector.OnDoubleTapListener {
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean = false
 

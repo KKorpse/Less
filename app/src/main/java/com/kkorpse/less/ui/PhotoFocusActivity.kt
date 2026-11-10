@@ -125,6 +125,9 @@ class PhotoFocusActivity : AppCompatActivity() {
                 dp(12) + bars.top
             (binding.bottomBar.layoutParams as FrameLayout.LayoutParams).bottomMargin =
                 bars.bottom
+            val contentTop = bars.top + dp(8)
+            val contentBottom = bars.bottom + dp(72)
+            binding.pager.post { adapter.setContentInsets(contentTop, contentBottom) }
             insets
         }
     }

@@ -4,6 +4,7 @@
     <dimen name="photo_card_height">268dp</dimen>
     <dimen name="photo_stack_width">330dp</dimen>
     <dimen name="photo_stack_height">340dp</dimen>
-    <dimen name="photo_card_offset">46dp</dimen>
+    <dimen name="photo_card_offset">18dp</dimen>
+    <dimen name="photo_card_offset_y">12dp</dimen>
     <dimen name="float_nav_bottom_margin">12dp</dimen>
 </resources>
