@@ -183,11 +183,11 @@ class VideoFeedFragment : Fragment() {
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
             (binding.videoActions.layoutParams as FrameLayout.LayoutParams).bottomMargin =
-                requireContext().dp(140) + bars.bottom
+                requireContext().dp(120) + bars.bottom
             (binding.videoTime.layoutParams as FrameLayout.LayoutParams).bottomMargin =
-                requireContext().dp(104) + bars.bottom
-            (binding.videoProgress.layoutParams as FrameLayout.LayoutParams).bottomMargin =
                 requireContext().dp(88) + bars.bottom
+            (binding.videoProgress.layoutParams as FrameLayout.LayoutParams).bottomMargin =
+                requireContext().dp(74) + bars.bottom
             insets
         }
     }

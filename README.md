@@ -4,11 +4,14 @@
 
 2.1 版本把照片、视频、统计收敛成**同一个首页的三个模式**：底部是悬浮胶囊导航，照片模式直接展示三张扑克牌，视频模式点一下就直接进入刷视频，不再额外打开新页面。
 
+2.2 版本继续打磨照片浏览：一组看完自动进入下一组；照片按原始比例装进圆角卡片，竖屏 2:3 时横向照片的上下空区会自动铺上照片整体色调；底部胶囊导航再压低 1/3，并给 tab 切换加了淡入淡出动效。
+
 ## 功能
 
 ### 首页
 
 - 只有一个主页面，底部悬浮胶囊：**照片 / 视频 / 统计**
+- 胶囊高度 44dp，比上一版压低约 1/3；三个模式切换使用淡出/淡入动效，照片卡片进入时带轻微缩放淡入
 - 照片模式：
   - 左上角是「照片 + 数量」胶囊
   - 右上角是收藏、设置圆形入口
@@ -25,12 +28,14 @@
 - 可以连续标记多张；整组看完后进入汇总页
 - 汇总页显示待删除数量和缩略图，一次系统确认批量移入回收站
 - 删除后可以「撤回删除」批量恢复
+- 没有待删除标记时，一组看完自动加载下一组；有标记时先处理汇总页，再自动进入下一组
 - 左下角圆形收藏（桃心），右下角圆形撤回（返回箭头），都不带文字
 - 中间信息气泡与两侧圆按钮等高，两行：
   - 第一行加粗：相对时间（今天 / N 天前 / N 周前 / N 个月前 / N 年前）
   - 第二行小号灰色：拍摄地址
 - 气泡右侧有一个信息按钮，可查看文件名、完整时间、地址
-- 背景使用当前照片的模糊虚化，照片卡片圆角居中
+- 照片按原始宽高比装进 24dp 圆角卡片，四角裁剪
+- 整页背景根据当前照片整体色调生成深色渐变；竖屏 2:3 下横向照片的上下空区会被照片色调填满
 - 地址来自照片 EXIF GPS，首次进入照片专注会请求一次位置权限
 - 没有 GPS 时显示「未记录拍摄地点」；无法反查地址时回退为坐标
 
@@ -88,7 +93,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.1.1（versionCode 8） |
+| 当前版本 | 2.2.0（versionCode 9） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -97,6 +102,7 @@
 | 视频播放 | Media3 ExoPlayer 1.7.1 |
 | 手势缩放 | PhotoView 2.3.0 |
 | EXIF / 地址 | androidx.exifinterface + Android Geocoder |
+| 整体取色 | androidx.palette |
 
 应用不含 `.so` 原生库，兼容 Android 15 / 16 的 16 KB 页大小设备。
 
@@ -110,7 +116,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.1.1-debug.apk
+app/build/outputs/apk/debug/Less-v2.2.0-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -124,13 +130,14 @@ dist/Less-v2.0.3-debug.apk
 dist/Less-v2.0.4-debug.apk
 dist/Less-v2.1.0-debug.apk
 dist/Less-v2.1.1-debug.apk
+dist/Less-v2.2.0-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.1.1-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.0-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -164,7 +171,9 @@ dist/SHA256SUMS.txt
   - 视频 tab 点击直接播放，右侧圆形收藏/删除/撤回，底部时间胶囊
   - 统计 tab 「使用统计」、双卡片、重置入口与确认框
   - 权限弹窗 Allow limited access / Allow all；授权后无需重启即可进入 tab
-  - 照片专注的模糊背景、信息气泡、信息按钮、批量删除汇总
+  - 照片专注的整页取色背景、按比例圆角卡片、信息气泡、信息按钮、批量删除汇总
+  - 2:3 竖屏（1680×2520）测试：横向照片四角圆角、上下空区使用照片色调
+  - 一组看完自动进入下一组
   - 收藏页照片/视频、设置页
 
 ## 项目结构
@@ -204,6 +213,7 @@ app/src/main/java/com/kkorpse/less/
 └── util/
     ├── MediaAccess.kt
     ├── PhotoLocationResolver.kt
+    ├── PhotoColorResolver.kt
     ├── Format.kt
     └── Dimens.kt
 ```
@@ -219,6 +229,7 @@ app/src/main/java/com/kkorpse/less/
 - 图片 HDR / 10-bit 显示效果取决于系统解码与屏幕能力；视频解码取决于设备硬件解码器。
 - 首次扫描大图库需要一点时间，MediaStore 对刚拷贝进来的文件可能有扫描延迟。
 - 部分照片授权目前依赖系统设置管理已选内容；统计页会提示当前为部分授权。
+- 整页取色使用照片主色再压暗，深色照片的背景会接近黑色，属于预期效果。
 
 ## 版本记录
 

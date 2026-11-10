@@ -3,6 +3,7 @@ package com.kkorpse.less.ui
 import android.Manifest
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -29,6 +30,7 @@ import com.kkorpse.less.data.MediaItem
 import com.kkorpse.less.data.PhotoFocusSession
 import com.kkorpse.less.databinding.ActivityPhotoFocusBinding
 import com.kkorpse.less.util.Format
+import com.kkorpse.less.util.PhotoColorResolver
 import com.kkorpse.less.util.PhotoLocationResolver
 import com.kkorpse.less.util.dp
 import kotlinx.coroutines.Job
@@ -43,11 +45,14 @@ class PhotoFocusActivity : AppCompatActivity() {
     private lateinit var layoutManager: LinearLayoutManager
     private lateinit var batchController: BatchTrashController
     private val locationResolver = PhotoLocationResolver()
+    private val colorResolver = PhotoColorResolver()
 
     private var initialScrollDone = false
+    private var lastGeneration = 0
     private var pendingScrollIndex: Int? = null
     private var pendingScrollOriginalIndex: Int? = null
     private var locationJob: Job? = null
+    private var colorJob: Job? = null
 
     private val locationLauncher = registerForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -68,13 +73,13 @@ class PhotoFocusActivity : AppCompatActivity() {
         binding = ActivityPhotoFocusBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        viewModel.initialize(session.items, session.startIndex)
+        viewModel.initialize(session.items, session.startIndex, session.autoNextGroup)
         val app = application as LessApp
         adapter = PhotoFocusAdapter(
             doubleTapAction = app.preferences.doubleTapAction,
             onFavorite = ::toggleFavorite,
             onBatchDelete = ::requestBatchDelete,
-            onFinish = { finish() },
+            onFinish = ::finishGroup,
             onUndoBatch = ::requestBatchUndo,
             onReview = ::reviewPhotos
         )
@@ -107,6 +112,7 @@ class PhotoFocusActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         locationJob?.cancel()
+        colorJob?.cancel()
         super.onDestroy()
     }
 
@@ -223,7 +229,12 @@ class PhotoFocusActivity : AppCompatActivity() {
                     adapter.submitList(pages) {
                         if (!initialScrollDone) {
                             initialScrollDone = true
+                            lastGeneration = viewModel.groupGeneration
                             scrollTo(viewModel.currentIndex)
+                        }
+                        if (viewModel.groupGeneration != lastGeneration) {
+                            lastGeneration = viewModel.groupGeneration
+                            scrollTo(0)
                         }
                         pendingScrollIndex?.let { index ->
                             if (pages.isNotEmpty()) {
@@ -292,17 +303,37 @@ class PhotoFocusActivity : AppCompatActivity() {
                 updateFavorite(page.item)
                 refreshUndo()
                 updateInfo(page)
+                updatePageBackground(page)
             }
 
             is FocusPage.Summary -> {
                 locationJob?.cancel()
                 binding.bottomBar.isVisible = false
+                if (page.pending.isEmpty() && page.deleted.isEmpty() &&
+                    !page.busy && viewModel.autoNextGroup
+                ) {
+                    viewModel.loadNextGroup()
+                }
             }
 
             null -> {
                 locationJob?.cancel()
                 binding.bottomBar.isVisible = false
             }
+        }
+    }
+
+    private fun updatePageBackground(page: FocusPage.Photo) {
+        colorJob?.cancel()
+        colorJob = lifecycleScope.launch {
+            val color = colorResolver.resolve(this@PhotoFocusActivity, page.item.uri)
+            val current = currentPage() as? FocusPage.Photo
+            if (current?.item?.uri != page.item.uri) return@launch
+            val gradient = GradientDrawable(
+                GradientDrawable.Orientation.TOP_BOTTOM,
+                intArrayOf(colorResolver.topColor(color), colorResolver.pageColor(color))
+            )
+            binding.root.background = gradient
         }
     }
 
@@ -402,6 +433,14 @@ class PhotoFocusActivity : AppCompatActivity() {
         val enabled = viewModel.pendingEntries().isNotEmpty() && !batchController.isBusy
         binding.undoButton.isEnabled = enabled
         binding.undoButton.alpha = if (enabled) 1f else 0.4f
+    }
+
+    private fun finishGroup() {
+        if (viewModel.autoNextGroup) {
+            viewModel.loadNextGroup()
+        } else {
+            finish()
+        }
     }
 
     private fun requestBatchDelete() {

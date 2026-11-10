@@ -99,7 +99,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:paddingTop="80dp"
-        android:paddingBottom="110dp">
+        android:paddingBottom="90dp">
 
         <LinearLayout
             android:id="@+id/photoContent"

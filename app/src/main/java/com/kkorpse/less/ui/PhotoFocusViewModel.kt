@@ -2,14 +2,23 @@ package com.kkorpse.less.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.data.MediaItem
+import com.kkorpse.less.data.MediaRepository
+import com.kkorpse.less.data.PhotoGroupBuilder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 
 class PhotoFocusViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as LessApp
+    private val groupBuilder = PhotoGroupBuilder(
+        MediaRepository(application),
+        app.preferences,
+        app.browseStore
+    )
 
     private val photoPages = mutableListOf<FocusPage.Photo>()
     private val pending = mutableListOf<PendingDelete>()
@@ -23,18 +32,60 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
         private set
 
     var currentIndex: Int = 0
+    var groupGeneration: Int = 0
+        private set
 
     private var initialized = false
+    var autoNextGroup: Boolean = true
+        private set
+    private var loadingNext = false
 
-    fun initialize(items: List<MediaItem>, startIndex: Int) {
+    fun initialize(items: List<MediaItem>, startIndex: Int, autoNextGroup: Boolean) {
         if (initialized) return
         initialized = true
+        this.autoNextGroup = autoNextGroup
         groupSize = items.size
         items.forEachIndexed { index, item ->
             photoPages += FocusPage.Photo(item, index)
         }
         currentIndex = startIndex.coerceIn(0, items.lastIndex.coerceAtLeast(0))
         emit()
+    }
+
+    fun loadNextGroup() {
+        if (!autoNextGroup || loadingNext) return
+        loadingNext = true
+        busy = true
+        emit()
+        viewModelScope.launch {
+            groupBuilder.newGroup()
+                .onSuccess { photos ->
+                    if (photos.isEmpty()) {
+                        loadingNext = false
+                        busy = false
+                        emit()
+                        return@onSuccess
+                    }
+                    photoPages.clear()
+                    pending.clear()
+                    deleted.clear()
+                    groupSize = photos.size
+                    photos.forEachIndexed { index, item ->
+                        photoPages += FocusPage.Photo(item, index)
+                    }
+                    currentIndex = 0
+                    groupGeneration++
+                    loadingNext = false
+                    busy = false
+                    emit()
+                }
+                .onFailure {
+                    loadingNext = false
+                    busy = false
+                    autoNextGroup = false
+                    emit()
+                }
+        }
     }
 
     fun markForDeletion(page: FocusPage.Photo): Boolean {

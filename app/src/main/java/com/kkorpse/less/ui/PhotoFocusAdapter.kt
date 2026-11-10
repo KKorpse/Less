@@ -1,14 +1,13 @@
 package com.kkorpse.less.ui
 
-import android.graphics.RenderEffect
-import android.graphics.Shader
-import android.os.Build
 import android.view.GestureDetector
+import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewOutlineProvider
+import android.widget.FrameLayout
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.TextView
@@ -29,6 +28,7 @@ import com.kkorpse.less.databinding.ItemGroupSummaryBinding
 import com.kkorpse.less.databinding.ItemPhotoFocusBinding
 import com.kkorpse.less.prefs.DoubleTapAction
 import com.kkorpse.less.util.dp
+import kotlin.math.roundToInt
 
 class PhotoFocusAdapter(
     private val doubleTapAction: DoubleTapAction,
@@ -93,16 +93,29 @@ class PhotoFocusAdapter(
             binding.photo.contentDescription = item.name
             binding.photo.setScale(1f, false)
             binding.photo.setZoomable(true)
-            binding.background.load(item.uri) {
-                crossfade(180)
-                placeholder(R.drawable.bg_thumb_placeholder)
-                size(256, 256)
+
+            // 按照片比例决定卡片尺寸：横向照片在竖屏上不会被黑边撑满，
+            // 空白区域由当前照片的整页背景色填充。
+            val context = binding.root.context
+            val dm = context.resources.displayMetrics
+            val maxWidth = (dm.widthPixels - context.dp(64)).coerceAtLeast(context.dp(160))
+            val maxHeight = (dm.heightPixels - context.dp(220)).coerceAtLeast(context.dp(160))
+            val ratio = if (item.width > 0 && item.height > 0) {
+                item.width.toFloat() / item.height.toFloat()
+            } else {
+                maxWidth.toFloat() / maxHeight.toFloat()
             }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                binding.background.setRenderEffect(
-                    RenderEffect.createBlurEffect(36f, 36f, Shader.TileMode.CLAMP)
-                )
+            var cardWidth = maxWidth.toFloat()
+            var cardHeight = cardWidth / ratio
+            if (cardHeight > maxHeight) {
+                cardHeight = maxHeight.toFloat()
+                cardWidth = cardHeight * ratio
             }
+            binding.card.layoutParams = FrameLayout.LayoutParams(
+                cardWidth.roundToInt(),
+                cardHeight.roundToInt(),
+                Gravity.CENTER
+            )
             binding.photo.setOnDoubleTapListener(object : GestureDetector.OnDoubleTapListener {
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean = false
 
@@ -141,7 +154,6 @@ class PhotoFocusAdapter(
 
         fun dispose() {
             binding.photo.dispose()
-            binding.background.dispose()
         }
     }
 

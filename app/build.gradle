@@ -11,8 +11,8 @@ android {
         applicationId "com.kkorpse.less"
         minSdk 29
         targetSdk 36
-        versionCode 8
-        versionName "2.1.1"
+        versionCode 9
+        versionName "2.2.0"
 
         vectorDrawables.useSupportLibrary = true
     }
@@ -52,6 +52,7 @@ dependencies {
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.activity:activity-ktx:1.10.1'
     implementation 'androidx.fragment:fragment-ktx:1.8.6'
+    implementation 'androidx.palette:palette-ktx:1.0.0'
     implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.9.0'
     implementation 'androidx.lifecycle:lifecycle-viewmodel-ktx:2.9.0'
     implementation 'androidx.recyclerview:recyclerview:1.4.0'

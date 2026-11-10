@@ -88,6 +88,21 @@ class PhotoHomeFragment : Fragment() {
         }
     }
 
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (!hidden && _binding != null) {
+            binding.cardStack.alpha = 0.35f
+            binding.cardStack.scaleX = 0.94f
+            binding.cardStack.scaleY = 0.94f
+            binding.cardStack.animate()
+                .alpha(1f)
+                .scaleX(1f)
+                .scaleY(1f)
+                .setDuration(260)
+                .start()
+        }
+    }
+
     override fun onDestroyView() {
         _binding = null
         super.onDestroyView()
@@ -192,6 +207,7 @@ class PhotoHomeFragment : Fragment() {
         PhotoFocusSession.items = photos
         PhotoFocusSession.startIndex = index.coerceIn(photos.indices)
         PhotoFocusSession.canTrash = true
+        PhotoFocusSession.autoNextGroup = true
         focusLauncher.launch(Intent(requireContext(), PhotoFocusActivity::class.java))
     }
 }

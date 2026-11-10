@@ -86,6 +86,7 @@ class FavoritesActivity : AppCompatActivity() {
                     PhotoFocusSession.items = favoritePhotos
                     PhotoFocusSession.startIndex = index
                     PhotoFocusSession.canTrash = true
+                    PhotoFocusSession.autoNextGroup = false
                     viewerLauncher.launch(Intent(this, PhotoFocusActivity::class.java))
                 }
             }

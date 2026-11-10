@@ -20,7 +20,7 @@
             android:paddingStart="20dp"
             android:paddingTop="10dp"
             android:paddingEnd="20dp"
-            android:paddingBottom="120dp">
+            android:paddingBottom="100dp">
 
             <LinearLayout
                 android:id="@+id/topBar"

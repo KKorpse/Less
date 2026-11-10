@@ -45,6 +45,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
 
     private var currentTab = Tab.PHOTOS
+    private var visibleTab: Tab? = null
     private var permissionPermanentlyDenied = false
     private var fragmentsAdded = false
     private var launchedFromFavoritesVideo = false
@@ -162,7 +163,7 @@ class MainActivity : AppCompatActivity() {
 
         if (granted) {
             ensureFragments()
-            showTab(currentTab, force = !fragmentsAdded)
+            showTab(currentTab, force = visibleTab == null)
             if (currentTab == Tab.VIDEOS) {
                 videoFragment?.resumeAfterPermission()
             }
@@ -217,13 +218,47 @@ class MainActivity : AppCompatActivity() {
             Tab.VIDEOS -> videoFragment
             Tab.STATS -> statsFragment
         } ?: return
-        val tx = supportFragmentManager.beginTransaction()
-        photoFragment?.let { if (it !== target) tx.hide(it) }
-        videoFragment?.let { if (it !== target) tx.hide(it) }
-        statsFragment?.let { if (it !== target) tx.hide(it) }
-        tx.show(target)
-        tx.commit()
 
+        updateNavSelection(tab)
+
+        if (!force && visibleTab == tab && target.isVisible) {
+            binding.tabContainer.alpha = 1f
+            return
+        }
+
+        fun commitTab() {
+            val tx = supportFragmentManager.beginTransaction()
+            photoFragment?.let { if (it !== target) tx.hide(it) }
+            videoFragment?.let { if (it !== target) tx.hide(it) }
+            statsFragment?.let { if (it !== target) tx.hide(it) }
+            tx.show(target)
+            tx.commit()
+            visibleTab = tab
+        }
+
+        if (force || !binding.tabContainer.isVisible) {
+            commitTab()
+            binding.tabContainer.alpha = 1f
+            return
+        }
+
+        binding.tabContainer.animate().cancel()
+        binding.tabContainer.alpha = 1f
+        binding.tabContainer.animate()
+            .alpha(0f)
+            .setDuration(100L)
+            .withEndAction {
+                commitTab()
+                binding.tabContainer.alpha = 0f
+                binding.tabContainer.animate()
+                    .alpha(1f)
+                    .setDuration(180L)
+                    .start()
+            }
+            .start()
+    }
+
+    private fun updateNavSelection(tab: Tab) {
         binding.navPhotos.isSelected = tab == Tab.PHOTOS
         binding.navVideos.isSelected = tab == Tab.VIDEOS
         binding.navStats.isSelected = tab == Tab.STATS
