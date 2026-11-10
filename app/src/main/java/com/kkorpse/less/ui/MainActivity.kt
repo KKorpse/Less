@@ -257,9 +257,13 @@ class MainActivity : AppCompatActivity() {
             binding.swipeRefresh.isVisible = false
             binding.partialBanner.isVisible = mode == AccessMode.PARTIAL && state.items.isNotEmpty()
             val message = when {
+                state.items.isNotEmpty() && state.filter == MediaFilter.PHOTOS ->
+                    getString(R.string.empty_photos)
+
+                state.items.isNotEmpty() && state.filter == MediaFilter.VIDEOS ->
+                    getString(R.string.empty_videos)
+
                 mode == AccessMode.PARTIAL -> getString(R.string.empty_partial_message)
-                state.filter == MediaFilter.PHOTOS -> getString(R.string.empty_photos)
-                state.filter == MediaFilter.VIDEOS -> getString(R.string.empty_videos)
                 else -> getString(R.string.empty_message)
             }
             val primaryText = when {
