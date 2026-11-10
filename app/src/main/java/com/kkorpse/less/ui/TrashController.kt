@@ -1,12 +1,13 @@
 package com.kkorpse.less.ui
 
 import android.app.Activity
+import android.content.Context
 import android.os.Build
 import android.provider.MediaStore
 import android.widget.Toast
+import androidx.activity.result.ActivityResultCaller
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.appcompat.app.AppCompatActivity
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaItem
 
@@ -14,7 +15,8 @@ import com.kkorpse.less.data.MediaItem
  * 通过系统 MediaStore 回收站删除/恢复媒体。系统会弹出确认窗口。
  */
 class TrashController(
-    private val activity: AppCompatActivity,
+    caller: ActivityResultCaller,
+    private val context: Context,
     private val onResult: (Request, Boolean) -> Unit
 ) {
 
@@ -28,7 +30,7 @@ class TrashController(
     var isBusy: Boolean = false
         private set
 
-    private val launcher = activity.registerForActivityResult(
+    private val launcher = caller.registerForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
     ) { result ->
         val request = pending
@@ -42,13 +44,13 @@ class TrashController(
     fun request(item: MediaItem, trash: Boolean, index: Int) {
         if (isBusy) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
-            Toast.makeText(activity, R.string.trash_unsupported, Toast.LENGTH_SHORT).show()
+            Toast.makeText(context, R.string.trash_unsupported, Toast.LENGTH_SHORT).show()
             return
         }
 
         try {
             val pendingIntent = MediaStore.createTrashRequest(
-                activity.contentResolver,
+                context.contentResolver,
                 listOf(item.uri),
                 trash
             )
@@ -60,8 +62,12 @@ class TrashController(
         } catch (e: Exception) {
             pending = null
             isBusy = false
-            val message = if (trash) R.string.trash_failed else R.string.restore_failed
-            Toast.makeText(activity, message, Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                context,
+                if (trash) R.string.trash_failed else R.string.restore_failed,
+                Toast.LENGTH_SHORT
+            ).show()
+            onResult(Request(item, trash, index), false)
         }
     }
 }

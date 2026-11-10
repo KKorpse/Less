@@ -129,6 +129,7 @@ class PhotoFocusActivity : AppCompatActivity() {
             currentPhoto()?.let { toggleFavorite(it) }
         }
         binding.undoButton.setOnClickListener { undoLastMark() }
+        binding.infoButton.setOnClickListener { showPhotoInfo() }
         binding.pager.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
@@ -317,6 +318,22 @@ class PhotoFocusActivity : AppCompatActivity() {
                 binding.infoAddress.text = address
             }
         }
+    }
+
+    private fun showPhotoInfo() {
+        val page = currentPage() as? FocusPage.Photo ?: return
+        val message = buildString {
+            append(page.item.name)
+            append("\n")
+            append(Format.fullDate(page.item.dateMillis))
+            append("\n")
+            append(binding.infoAddress.text)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.photo_info_title)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
     }
 
     private fun maybeRequestLocationPermission() {

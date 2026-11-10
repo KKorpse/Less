@@ -73,7 +73,12 @@ class FavoritesActivity : AppCompatActivity() {
                 if (index >= 0) {
                     VideoFeedSession.items = favoriteVideos
                     VideoFeedSession.startIndex = index
-                    viewerLauncher.launch(Intent(this, VideoFeedActivity::class.java))
+                    viewerLauncher.launch(
+                        Intent(this, MainActivity::class.java).putExtra(
+                            MainActivity.EXTRA_START_TAB,
+                            MainActivity.TAB_VIDEO
+                        )
+                    )
                 }
             } else {
                 val index = favoritePhotos.indexOfFirst { it.uri == item.uri }

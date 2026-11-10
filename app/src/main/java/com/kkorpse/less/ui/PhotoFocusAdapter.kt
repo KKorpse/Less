@@ -1,5 +1,8 @@
 package com.kkorpse.less.ui
 
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import android.os.Build
 import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.MotionEvent
@@ -90,6 +93,16 @@ class PhotoFocusAdapter(
             binding.photo.contentDescription = item.name
             binding.photo.setScale(1f, false)
             binding.photo.setZoomable(true)
+            binding.background.load(item.uri) {
+                crossfade(180)
+                placeholder(R.drawable.bg_thumb_placeholder)
+                size(256, 256)
+            }
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                binding.background.setRenderEffect(
+                    RenderEffect.createBlurEffect(36f, 36f, Shader.TileMode.CLAMP)
+                )
+            }
             binding.photo.setOnDoubleTapListener(object : GestureDetector.OnDoubleTapListener {
                 override fun onSingleTapConfirmed(e: MotionEvent): Boolean = false
 
@@ -128,6 +141,7 @@ class PhotoFocusAdapter(
 
         fun dispose() {
             binding.photo.dispose()
+            binding.background.dispose()
         }
     }
 

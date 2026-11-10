@@ -4,17 +4,17 @@ import android.content.res.ColorStateList
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.view.LayoutInflater
 import android.view.View
+import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.Toast
-import androidx.activity.enableEdgeToEdge
-import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -29,14 +29,16 @@ import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaItem
 import com.kkorpse.less.data.VideoFeedSession
-import com.kkorpse.less.databinding.ActivityVideoFeedBinding
+import com.kkorpse.less.databinding.FragmentVideoFeedBinding
 import com.kkorpse.less.util.Format
 import com.kkorpse.less.util.dp
 import kotlinx.coroutines.launch
 
-class VideoFeedActivity : AppCompatActivity() {
+class VideoFeedFragment : Fragment() {
 
-    private lateinit var binding: ActivityVideoFeedBinding
+    private var _binding: FragmentVideoFeedBinding? = null
+    private val binding get() = _binding!!
+
     private val viewModel: VideoFeedViewModel by viewModels()
 
     private lateinit var adapter: VideoFeedAdapter
@@ -57,15 +59,26 @@ class VideoFeedActivity : AppCompatActivity() {
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        binding = ActivityVideoFeedBinding.inflate(layoutInflater)
-        setContentView(binding.root)
-        window.addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+        trashController = TrashController(this, requireContext()) { request, success ->
+            handleTrashResult(request, success)
+        }
+    }
 
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        _binding = FragmentVideoFeedBinding.inflate(inflater, container, false)
+        return binding.root
+    }
+
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
         viewModel.initialize(VideoFeedSession.items, VideoFeedSession.startIndex)
 
-        player = ExoPlayer.Builder(this).build().apply {
+        player = ExoPlayer.Builder(requireContext()).build().apply {
             repeatMode = Player.REPEAT_MODE_ONE
             setAudioAttributes(
                 AudioAttributes.Builder()
@@ -81,10 +94,11 @@ class VideoFeedActivity : AppCompatActivity() {
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
+                    if (_binding == null) return
                     adapter.showError(viewModel.currentIndex, true)
                     updatePlayIndicator()
                     Toast.makeText(
-                        this@VideoFeedActivity,
+                        requireContext(),
                         R.string.viewer_video_error,
                         Toast.LENGTH_SHORT
                     ).show()
@@ -97,49 +111,14 @@ class VideoFeedActivity : AppCompatActivity() {
         binding.pager.offscreenPageLimit = 1
         binding.pager.adapter = adapter
 
-        binding.back.bringToFront()
-        binding.counter.bringToFront()
-        binding.videoActions.isVisible = viewModel.state.value.videos.isNotEmpty()
-        binding.videoInfo.isVisible = viewModel.state.value.videos.isNotEmpty()
-
-        WindowCompat.getInsetsController(window, binding.root).apply {
-            isAppearanceLightStatusBars = false
-            isAppearanceLightNavigationBars = false
-        }
-
         setupInsets()
         setupActions()
-
-        trashController = TrashController(this) { request, success ->
-            handleTrashResult(request, success)
-        }
-
-        binding.pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
-            override fun onPageSelected(position: Int) {
-                viewModel.setCurrentIndex(position)
-                player.pause()
-                if (attachedPosition != RecyclerView.NO_POSITION) {
-                    adapter.attachPlayer(attachedPosition, null)
-                }
-                retryCount = 0
-                playAt(position)
-                updateOverlay(position)
-            }
-        })
-
         observeState()
-        updateOverlay(0)
     }
 
     override fun onResume() {
         super.onResume()
-        if (viewModel.state.value.videos.isNotEmpty()) {
-            if (player.mediaItemCount == 0) {
-                playAt(viewModel.currentIndex)
-            } else {
-                player.play()
-            }
-        }
+        if (!isHidden) resumePlayback()
         handler.removeCallbacks(progressRunnable)
         handler.post(progressRunnable)
     }
@@ -150,10 +129,52 @@ class VideoFeedActivity : AppCompatActivity() {
         super.onPause()
     }
 
-    override fun onDestroy() {
+    override fun onHiddenChanged(hidden: Boolean) {
+        super.onHiddenChanged(hidden)
+        if (!::player.isInitialized) return
+        if (hidden) {
+            player.pause()
+            handler.removeCallbacks(progressRunnable)
+        } else {
+            binding.pager.post {
+                resumePlayback()
+            }
+            handler.removeCallbacks(progressRunnable)
+            handler.post(progressRunnable)
+        }
+    }
+
+    override fun onDestroyView() {
         handler.removeCallbacks(progressRunnable)
         if (::player.isInitialized) player.release()
-        super.onDestroy()
+        _binding = null
+        super.onDestroyView()
+    }
+
+    fun pauseForPermissionLoss() {
+        if (::player.isInitialized) player.pause()
+        handler.removeCallbacks(progressRunnable)
+    }
+
+    fun resumeAfterPermission() {
+        if (!isHidden) resumePlayback()
+        handler.removeCallbacks(progressRunnable)
+        handler.post(progressRunnable)
+    }
+
+    private fun resumePlayback() {
+        if (viewModel.state.value.videos.isEmpty()) return
+        val position = viewModel.currentIndex
+        updateOverlay(position)
+        if (player.mediaItemCount == 0 || attachedPosition != position) {
+            binding.pager.post {
+                retryCount = 0
+                playAt(position)
+            }
+        } else {
+            player.play()
+        }
+        updatePlayIndicator()
     }
 
     private fun setupInsets() {
@@ -161,41 +182,52 @@ class VideoFeedActivity : AppCompatActivity() {
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            (binding.back.layoutParams as FrameLayout.LayoutParams).topMargin =
-                dp(12) + bars.top
-            (binding.counter.layoutParams as FrameLayout.LayoutParams).topMargin =
-                dp(18) + bars.top
             (binding.videoActions.layoutParams as FrameLayout.LayoutParams).bottomMargin =
-                dp(104) + bars.bottom
-            (binding.videoInfo.layoutParams as FrameLayout.LayoutParams).bottomMargin =
-                dp(28) + bars.bottom
+                requireContext().dp(140) + bars.bottom
+            (binding.videoTime.layoutParams as FrameLayout.LayoutParams).bottomMargin =
+                requireContext().dp(104) + bars.bottom
             (binding.videoProgress.layoutParams as FrameLayout.LayoutParams).bottomMargin =
-                bars.bottom
+                requireContext().dp(88) + bars.bottom
             insets
         }
     }
 
     private fun setupActions() {
-        binding.back.setOnClickListener { finish() }
         binding.favoriteAction.setOnClickListener {
             currentItem()?.let { toggleFavorite(it) }
         }
         binding.deleteAction.setOnClickListener { deleteCurrent() }
         binding.undoAction.setOnClickListener { undoLast() }
         binding.emptyUndo.setOnClickListener { undoLast() }
+
+        binding.pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
+            override fun onPageSelected(position: Int) {
+                if (_binding == null) return
+                viewModel.setCurrentIndex(position)
+                player.pause()
+                if (attachedPosition != RecyclerView.NO_POSITION) {
+                    adapter.attachPlayer(attachedPosition, null)
+                }
+                retryCount = 0
+                playAt(position)
+                updateOverlay(position)
+            }
+        })
     }
 
     private fun observeState() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.state.collect { state ->
+                    if (_binding == null) return@collect
                     binding.loading.isVisible = state.loading && state.videos.isEmpty()
                     val empty = !state.loading && state.videos.isEmpty()
                     binding.emptyPanel.isVisible = empty
                     binding.videoActions.isVisible = state.videos.isNotEmpty()
-                    binding.videoInfo.isVisible = state.videos.isNotEmpty()
+                    binding.videoTime.isVisible = state.videos.isNotEmpty()
 
                     adapter.submitList(state.videos) {
+                        if (_binding == null) return@submitList
                         if (state.videos.isEmpty()) {
                             resetAttachment()
                             player.stop()
@@ -221,6 +253,7 @@ class VideoFeedActivity : AppCompatActivity() {
                             initialApplied = true
                             val index = viewModel.currentIndex.coerceIn(state.videos.indices)
                             binding.pager.setCurrentItem(index, false)
+                            updateOverlay(index)
                             binding.pager.post {
                                 retryCount = 0
                                 playAt(index)
@@ -240,6 +273,7 @@ class VideoFeedActivity : AppCompatActivity() {
     }
 
     private fun playAt(position: Int) {
+        if (_binding == null) return
         val videos = viewModel.state.value.videos
         val item = videos.getOrNull(position) ?: return
 
@@ -255,10 +289,11 @@ class VideoFeedActivity : AppCompatActivity() {
         }
 
         if (adapter.playerViewAt(position) == null) {
-            if (retryCount++ < 3) {
+            updateOverlay(position)
+            if (retryCount++ < 8) {
                 binding.pager.postDelayed({
-                    if (binding.pager.currentItem == position) playAt(position)
-                }, 60L)
+                    if (_binding != null && binding.pager.currentItem == position) playAt(position)
+                }, 80L)
             }
             return
         }
@@ -272,36 +307,20 @@ class VideoFeedActivity : AppCompatActivity() {
         adapter.showError(position, false)
 
         viewModel.setCurrentIndex(position)
-        (application as LessApp).browseStore.markViewed(item.uri, true)
+        (requireActivity().application as LessApp).browseStore.markViewed(item.uri, true)
         updateOverlay(position)
         updatePlayIndicator()
     }
 
-    private fun togglePlayback() {
-        if (viewModel.state.value.videos.isEmpty()) return
-        if (player.mediaItemCount == 0) {
-            playAt(binding.pager.currentItem)
-            return
-        }
-        if (player.isPlaying) player.pause() else player.play()
-        updatePlayIndicator()
-    }
-
     private fun toggleFavorite(item: MediaItem) {
-        val app = application as LessApp
-        val favorite = app.browseStore.toggleFavorite(item.uri)
-        Toast.makeText(
-            this,
-            if (favorite) R.string.favorite_added else R.string.favorite_removed,
-            Toast.LENGTH_SHORT
-        ).show()
+        (requireActivity().application as LessApp).browseStore.toggleFavorite(item.uri)
         updateFavorite(item)
     }
 
     private fun deleteCurrent() {
         val index = binding.pager.currentItem
         val item = currentItem() ?: return
-        if (trashController.isBusy) return
+        if (trashController.isBusy == true) return
         player.pause()
         trashController.request(item, trash = true, index = index)
         refreshActions()
@@ -309,18 +328,19 @@ class VideoFeedActivity : AppCompatActivity() {
 
     private fun undoLast() {
         val entry = viewModel.peekUndo() ?: return
-        if (trashController.isBusy) return
+        if (trashController.isBusy == true) return
         player.pause()
         trashController.request(entry.item, trash = false, index = entry.index)
         refreshActions()
     }
 
     private fun handleTrashResult(request: TrashController.Request, success: Boolean) {
+        if (_binding == null) return
         if (request.trash) {
             if (success) {
                 pendingPlayIndex = request.index
                 viewModel.confirmTrash(request.item, request.index)
-                Toast.makeText(this, R.string.trash_success, Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), R.string.trash_success, Toast.LENGTH_SHORT).show()
             } else {
                 playAt(viewModel.currentIndex)
             }
@@ -328,77 +348,72 @@ class VideoFeedActivity : AppCompatActivity() {
             if (success) {
                 pendingPlayIndex = request.index
                 viewModel.confirmRestore(request.item, request.index)
-                Toast.makeText(this, R.string.restore_success, Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), R.string.restore_success, Toast.LENGTH_SHORT).show()
             } else {
-                Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show()
+                Toast.makeText(requireContext(), R.string.restore_failed, Toast.LENGTH_SHORT).show()
                 playAt(viewModel.currentIndex)
             }
         }
         refreshActions()
     }
 
-    private fun currentItem(): MediaItem? {
-        return viewModel.state.value.videos.getOrNull(binding.pager.currentItem)
-    }
+    private fun currentItem(): MediaItem? =
+        viewModel.state.value.videos.getOrNull(binding.pager.currentItem)
 
     private fun updateOverlay(position: Int) {
+        if (_binding == null) return
         val videos = viewModel.state.value.videos
         val item = videos.getOrNull(position)
         if (item == null) {
-            binding.counter.text = ""
-            binding.fileName.text = ""
-            binding.videoMeta.text = ""
+            binding.videoTime.isVisible = false
             binding.playIndicator.isVisible = false
             binding.videoProgress.progress = 0
             binding.emptyUndo.isVisible = viewModel.canUndo.value
             return
         }
 
-        binding.counter.text = getString(
-            R.string.video_position,
-            position + 1,
-            videos.size
-        )
-        binding.fileName.text = item.name
-        val meta = buildString {
-            append(Format.relativeTime(item.dateMillis))
-            if (item.durationMs > 0L) {
-                append(" · ")
-                append(Format.duration(item.durationMs))
-            }
+        val relative = Format.relativeTime(item.dateMillis)
+        binding.videoTime.text = if (item.durationMs > 0L) {
+            getString(R.string.video_time_duration, relative, Format.duration(item.durationMs))
+        } else {
+            relative
         }
-        binding.videoMeta.text = meta
+        binding.videoTime.isVisible = true
         updateFavorite(item)
         refreshActions()
         updatePlayIndicator()
     }
 
     private fun updateFavorite(item: MediaItem) {
-        val favorite = (application as LessApp).browseStore.isFavorite(item.uri)
-        binding.favoriteIcon.setImageResource(
+        val favorite = (requireActivity().application as LessApp).browseStore.isFavorite(item.uri)
+        binding.favoriteAction.setImageResource(
             if (favorite) R.drawable.ic_heart_filled else R.drawable.ic_heart
         )
-        binding.favoriteIcon.imageTintList = ColorStateList.valueOf(
-            ContextCompat.getColor(this, if (favorite) R.color.heart else R.color.accent)
+        binding.favoriteAction.imageTintList = ColorStateList.valueOf(
+            ContextCompat.getColor(
+                requireContext(),
+                if (favorite) R.color.heart else R.color.accent
+            )
         )
-        binding.favoriteLabel.text = getString(
-            if (favorite) R.string.favorited else R.string.favorite
+        binding.favoriteAction.contentDescription = getString(
+            if (favorite) R.string.unfavorite_content_desc else R.string.favorite_content_desc
         )
     }
 
     private fun refreshActions() {
         val hasVideo = viewModel.state.value.videos.isNotEmpty()
-        val canUndo = viewModel.canUndo.value && !trashController.isBusy
-        binding.deleteAction.isEnabled = hasVideo && !trashController.isBusy
+        val busy = trashController.isBusy == true
+        val canUndo = viewModel.canUndo.value && !busy
+        binding.deleteAction.isEnabled = hasVideo && !busy
         binding.deleteAction.alpha = if (binding.deleteAction.isEnabled) 1f else 0.4f
         binding.undoAction.isEnabled = canUndo
         binding.undoAction.alpha = if (canUndo) 1f else 0.4f
-        binding.emptyUndo.isVisible =
-            viewModel.state.value.videos.isEmpty() && viewModel.canUndo.value
+        binding.emptyUndo.isVisible = !hasVideo && viewModel.canUndo.value
     }
 
     private fun updatePlayIndicator() {
-        if (!::adapter.isInitialized || viewModel.state.value.videos.isEmpty()) {
+        if (_binding == null || !::player.isInitialized) return
+        if (viewModel.state.value.videos.isEmpty()) {
             binding.playIndicator.isVisible = false
             return
         }
@@ -406,6 +421,7 @@ class VideoFeedActivity : AppCompatActivity() {
     }
 
     private fun updateProgress() {
+        if (_binding == null || !::player.isInitialized) return
         val duration = player.duration
         if (duration > 0L) {
             binding.videoProgress.progress =

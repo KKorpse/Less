@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="stats_usage_title">使用统计</string>
+    <string name="stats_reset_title">重置浏览记录</string>
+    <string name="stats_reset_subtitle">已查看 %1$d 项，已删除 %2$d 项</string>
+    <string name="stats_viewed_icon">查看</string>
+    <string name="stats_deleted_icon">删除</string>
+    <string name="photo_group_pill">照片</string>
+    <string name="video_time_pill">%1$s</string>
+    <string name="video_time_duration">%1$s · %2$s</string>
+</resources>

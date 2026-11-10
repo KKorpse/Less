@@ -1,13 +1,27 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:padding="10dp">
+    android:layout_height="match_parent">
+
+    <ImageView
+        android:id="@+id/background"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:alpha="0.5"
+        android:contentDescription="@null"
+        android:importantForAccessibility="no"
+        android:scaleType="centerCrop" />
+
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#A6000000" />
 
     <com.kkorpse.less.ui.FocusCardLayout
         android:id="@+id/card"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
+        android:layout_margin="24dp"
         android:background="@drawable/bg_photo_card">
 
         <com.github.chrisbanes.photoview.PhotoView

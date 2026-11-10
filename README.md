@@ -2,53 +2,56 @@
 
 为 **OPPO Pad Mini（OPD2515，ColorOS 16 / Android 16 / API 36）** 做的本机相册。界面克制、暗色、无广告、无 `INTERNET` 权限。
 
-2.0 版本以浏览动作为中心：首页进入照片、视频、统计；照片按组以扑克牌形式进入专注浏览；视频是抖音式纵向流。
+2.1 版本把照片、视频、统计收敛成**同一个首页的三个模式**：底部是悬浮胶囊导航，照片模式直接展示三张扑克牌，视频模式点一下就直接进入刷视频，不再额外打开新页面。
 
 ## 功能
 
 ### 首页
 
-- 底部三个入口：**照片 / 视频 / 统计**
-- 右上角：**收藏**、**设置**
-- 部分照片授权时，顶部显示「仅显示你已选择的照片和视频」和「管理」
+- 只有一个主页面，底部悬浮胶囊：**照片 / 视频 / 统计**
+- 照片模式：
+  - 左上角是「照片 + 数量」胶囊
+  - 右上角是收藏、设置圆形入口
+  - 三张照片缩小为带白色描边的扑克牌，居中叠放，背景是当前照片的模糊虚化
+  - 点击任意卡片才进入专注浏览
+  - 切到其他 tab 再回来，卡片组保留
+- 视频模式：点击底部「视频」直接进入纵向刷视频，不再单独起页
+- 统计模式：标题「使用统计」，右上角设置，底部导航始终悬浮
 
-### 照片
+### 照片专注
 
-- 三张照片像扑克牌一样重叠；底部 bar 同时显示，不冲突
-- 只有点击三张卡片才进入专注浏览
-- 按设置中的「每组数量」取一组照片；随机或顺序
-- 左右滑动切换
-- **上滑不是立即删除**：卡片会缩小、淡出、向上消失，并标记为待删除；可以连续标记多张
-- 整组浏览到最后一页后，进入汇总页：显示待删除数量和缩略图，一次性确认
-- 确认后通过系统回收站批量删除；系统只弹一次确认
-- 汇总页删除后可以「撤回删除」，批量从回收站恢复
-- 专注页左下角是一个圆形收藏按钮（桃心），右下角是一个圆形撤回按钮（返回箭头），都不带文字
-- 撤回按钮恢复最近一次标记，而不是立即操作系统删除
-- 中间信息气泡与两侧圆按钮等高，两行内容：
+- 左右滑动切换；上滑标记为待删除
+- 上滑时卡片缩小、淡出、向上消失，不立即打扰系统
+- 可以连续标记多张；整组看完后进入汇总页
+- 汇总页显示待删除数量和缩略图，一次系统确认批量移入回收站
+- 删除后可以「撤回删除」批量恢复
+- 左下角圆形收藏（桃心），右下角圆形撤回（返回箭头），都不带文字
+- 中间信息气泡与两侧圆按钮等高，两行：
   - 第一行加粗：相对时间（今天 / N 天前 / N 周前 / N 个月前 / N 年前）
-  - 第二行小一号灰色：照片拍摄地址
-- 地址来自照片 EXIF GPS，首次进入照片专注时会请求一次位置权限
+  - 第二行小号灰色：拍摄地址
+- 气泡右侧有一个信息按钮，可查看文件名、完整时间、地址
+- 背景使用当前照片的模糊虚化，照片卡片圆角居中
+- 地址来自照片 EXIF GPS，首次进入照片专注会请求一次位置权限
 - 没有 GPS 时显示「未记录拍摄地点」；无法反查地址时回退为坐标
-- 普通照片组不会无限补组；到组尾就进入汇总页，处理完回到照片首页进入下一组
 
 ### 视频
 
-- 进入即自动播放第一个视频，上下滑动切换
-- 抖音式纵向全屏流，当前视频循环播放
-- 右侧由上到下：**收藏 / 删除 / 撤回**
-- 视频仍是即时删除：调用系统回收站，撤回请求恢复最近一次删除
-- 底部左侧显示文件名、相对时间和视频时长
-- 底部有一条播放进度线
+- 纵向全屏流，进入自动播放，上下滑动切换
+- 右侧无文字圆形按钮，由上到下：**收藏 / 删除 / 撤回**
+- 左下角显示相对时间和时长胶囊
+- 底部细进度线
+- 视频仍然即时删除/撤回，调用系统回收站
+- 悬浮胶囊导航保持可见，可在视频中直接切到照片/统计
 
 ### 统计
 
-两行：照片、视频。每行显示：
+「使用统计」页面：
 
-- 总数
-- 已查看
-- 已删除（本应用发起的删除操作数，撤回会减回去）
-
-底部「重置浏览记录」会清空照片/视频的已查看标记，并让顺序浏览从第一张重新开始。收藏和删除记录不会被清除。
+- 照片、视频两张卡片
+- 每张卡片：**总数 / 查看 / 删除**
+- 查看、删除带蓝色/红色图标
+- 底部「重置浏览记录」卡片显示已查看/已删除数量，点击确认后清空已查看标记
+- 顺序浏览游标一并重置；收藏和删除计数不清除
 
 ### 设置
 
@@ -85,12 +88,12 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.0.4（versionCode 6） |
+| 当前版本 | 2.1.1（versionCode 8） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
 | 构建 | Gradle 8.11.1 + AGP 8.9.1 + JDK 17 |
-| 图片加载 | Coil 3（含视频抽帧） |
+| 图片加载 | Coil 3（含视频抽帧、背景模糊） |
 | 视频播放 | Media3 ExoPlayer 1.7.1 |
 | 手势缩放 | PhotoView 2.3.0 |
 | EXIF / 地址 | androidx.exifinterface + Android Geocoder |
@@ -107,7 +110,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.0.4-debug.apk
+app/build/outputs/apk/debug/Less-v2.1.1-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -119,13 +122,15 @@ dist/Less-v2.0.1-debug.apk
 dist/Less-v2.0.2-debug.apk
 dist/Less-v2.0.3-debug.apk
 dist/Less-v2.0.4-debug.apk
+dist/Less-v2.1.0-debug.apk
+dist/Less-v2.1.1-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.0.4-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.1.1-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -153,17 +158,14 @@ dist/SHA256SUMS.txt
 
 - `lintDebug`：通过，无 error
 - Android 16 平板模拟器（Pixel Tablet，2560×1600，API 36）：
-  - 权限弹窗确认出现「Allow limited access / Allow all」
-  - 全部授权、部分授权均可用
-  - 照片页三张卡片 + 底部 bar 同时显示
-  - 连续上滑标记 3 张不弹系统框，不再卡在第二张
-  - 组尾汇总页显示待删除数量和缩略图
-  - 一次系统确认批量删除 3 张；汇总页撤回后批量恢复
-  - 圆形收藏/撤回按钮、双行信息气泡（时间 + 地址）、地址 fallback
-  - 视频流自动播放、上下滑动、右侧收藏/删除/撤回
-  - 收藏页照片/视频
-  - 统计总数/已查看/已删除、重置浏览记录
-  - 设置页与切换按钮
+  - 单首页三 tab 与悬浮胶囊导航
+  - 照片模式三张白边扑克牌 + 模糊背景 + 底部导航同时展示
+  - 点击卡片进入专注，返回后仍在照片 tab
+  - 视频 tab 点击直接播放，右侧圆形收藏/删除/撤回，底部时间胶囊
+  - 统计 tab 「使用统计」、双卡片、重置入口与确认框
+  - 权限弹窗 Allow limited access / Allow all；授权后无需重启即可进入 tab
+  - 照片专注的模糊背景、信息气泡、信息按钮、批量删除汇总
+  - 收藏页照片/视频、设置页
 
 ## 项目结构
 
@@ -173,35 +175,35 @@ app/src/main/java/com/kkorpse/less/
 ├── data/
 │   ├── MediaItem.kt
 │   ├── MediaRepository.kt
-│   ├── MediaSession.kt              # 系统选择器兜底会话
-│   ├── BrowseSessions.kt            # 照片组 / 视频流会话
-│   └── PhotoGroupBuilder.kt         # 随机/顺序抽组
+│   ├── MediaSession.kt
+│   ├── BrowseSessions.kt
+│   └── PhotoGroupBuilder.kt
 ├── prefs/
-│   ├── AppPreferences.kt            # 每组数量、双击手势、浏览模式、位置权限询问
-│   └── BrowseStore.kt               # 已查看、收藏、删除计数、顺序游标
+│   ├── AppPreferences.kt
+│   └── BrowseStore.kt
 ├── ui/
-│   ├── MainActivity.kt              # 首页 + 权限
-│   ├── PhotoHomeActivity.kt         # 三张扑克牌 + 底部 bar
-│   ├── PhotoFocusPage.kt            # 照片页 / 汇总页
-│   ├── PhotoFocusActivity.kt        # 照片专注浏览
+│   ├── MainActivity.kt              # 单首页 tab host + 悬浮胶囊导航 + 权限
+│   ├── PhotoHomeFragment.kt         # 照片模式：三张扑克牌
+│   ├── PhotoFocusPage.kt
+│   ├── PhotoFocusActivity.kt        # 照片专注
 │   ├── PhotoFocusAdapter.kt
-│   ├── PhotoFocusViewModel.kt       # 标记删除、撤销、批量汇总状态
-│   ├── BatchTrashController.kt      # 批量系统回收站
-│   ├── VideoFeedActivity.kt         # 抖音式视频流
+│   ├── PhotoFocusViewModel.kt
+│   ├── BatchTrashController.kt
+│   ├── VideoFeedFragment.kt         # 视频 tab
 │   ├── VideoFeedAdapter.kt
 │   ├── VideoFeedViewModel.kt
-│   ├── StatsActivity.kt
+│   ├── StatsFragment.kt             # 使用统计 tab
 │   ├── SettingsActivity.kt
 │   ├── FavoritesActivity.kt
-│   ├── ViewerActivity.kt            # 系统选择器兜底浏览
+│   ├── ViewerActivity.kt            # 系统选择器兜底
 │   ├── ViewerAdapter.kt
-│   ├── GalleryAdapter.kt            # 收藏页网格
-│   ├── FocusCardLayout.kt           # 未缩放时把滑动交给 RecyclerView
+│   ├── GalleryAdapter.kt
+│   ├── FocusCardLayout.kt
 │   ├── SquareFrameLayout.kt
-│   └── TrashController.kt           # 视频单个删除/恢复
+│   └── TrashController.kt
 └── util/
     ├── MediaAccess.kt
-    ├── PhotoLocationResolver.kt     # EXIF GPS + Geocoder
+    ├── PhotoLocationResolver.kt
     ├── Format.kt
     └── Dimens.kt
 ```
@@ -216,6 +218,7 @@ app/src/main/java/com/kkorpse/less/
 - 视频流目前自动播放声音，没有静音开关。
 - 图片 HDR / 10-bit 显示效果取决于系统解码与屏幕能力；视频解码取决于设备硬件解码器。
 - 首次扫描大图库需要一点时间，MediaStore 对刚拷贝进来的文件可能有扫描延迟。
+- 部分照片授权目前依赖系统设置管理已选内容；统计页会提示当前为部分授权。
 
 ## 版本记录
 

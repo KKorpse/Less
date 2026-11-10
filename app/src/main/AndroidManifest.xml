@@ -39,28 +39,10 @@
         </activity>
 
         <activity
-            android:name=".ui.PhotoHomeActivity"
-            android:exported="false"
-            android:resizeableActivity="true"
-            android:theme="@style/Theme.Less" />
-
-        <activity
             android:name=".ui.PhotoFocusActivity"
             android:exported="false"
             android:resizeableActivity="true"
             android:theme="@style/Theme.Less.Viewer" />
-
-        <activity
-            android:name=".ui.VideoFeedActivity"
-            android:exported="false"
-            android:resizeableActivity="true"
-            android:theme="@style/Theme.Less.Viewer" />
-
-        <activity
-            android:name=".ui.StatsActivity"
-            android:exported="false"
-            android:resizeableActivity="true"
-            android:theme="@style/Theme.Less" />
 
         <activity
             android:name=".ui.SettingsActivity"

@@ -36,6 +36,8 @@
     <string name="location_permission_message">允许 Less 读取照片中的位置信息，用来在照片下方显示拍摄地址。拒绝也可以继续浏览。</string>
     <string name="location_permission_allow">允许</string>
     <string name="location_permission_not_now">暂不</string>
+    <string name="photo_info_title">照片信息</string>
+    <string name="photo_info_desc">照片信息</string>
 
     <string name="summary_title_done">本组已看完</string>
     <string name="summary_title_deleted">已移入系统回收站</string>

@@ -1,8 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <dimen name="photo_card_width">300dp</dimen>
-    <dimen name="photo_card_height">400dp</dimen>
-    <dimen name="photo_stack_width">460dp</dimen>
-    <dimen name="photo_stack_height">480dp</dimen>
-    <dimen name="photo_card_offset">70dp</dimen>
+    <dimen name="photo_card_width">230dp</dimen>
+    <dimen name="photo_card_height">310dp</dimen>
+    <dimen name="photo_stack_width">380dp</dimen>
+    <dimen name="photo_stack_height">400dp</dimen>
+    <dimen name="photo_card_offset">54dp</dimen>
+    <dimen name="float_nav_bottom_margin">22dp</dimen>
 </resources>

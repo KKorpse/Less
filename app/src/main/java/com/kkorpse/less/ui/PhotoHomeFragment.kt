@@ -1,17 +1,20 @@
 package com.kkorpse.less.ui
 
 import android.content.Intent
+import android.graphics.RenderEffect
+import android.graphics.Shader
+import android.os.Build
 import android.os.Bundle
-import android.widget.Toast
-import androidx.activity.enableEdgeToEdge
+import android.view.LayoutInflater
+import android.view.View
+import android.view.ViewGroup
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.activity.viewModels
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
-import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
+import androidx.fragment.app.Fragment
+import androidx.fragment.app.viewModels
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -24,17 +27,18 @@ import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaItem
 import com.kkorpse.less.data.PhotoFocusSession
-import com.kkorpse.less.data.VideoFeedSession
-import com.kkorpse.less.databinding.ActivityPhotoHomeBinding
+import com.kkorpse.less.databinding.FragmentPhotoHomeBinding
 import com.kkorpse.less.prefs.BrowseMode
-import com.kkorpse.less.util.MediaAccess
 import com.kkorpse.less.util.dp
 import kotlinx.coroutines.launch
 
-class PhotoHomeActivity : AppCompatActivity() {
+class PhotoHomeFragment : Fragment() {
 
-    private lateinit var binding: ActivityPhotoHomeBinding
+    private var _binding: FragmentPhotoHomeBinding? = null
+    private val binding get() = _binding!!
+
     private val viewModel: PhotoHomeViewModel by viewModels()
+    private var lastSettingsSignature = ""
 
     private val focusLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -42,42 +46,56 @@ class PhotoHomeActivity : AppCompatActivity() {
         viewModel.nextGroup()
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
-        super.onCreate(savedInstanceState)
-        binding = ActivityPhotoHomeBinding.inflate(layoutInflater)
-        setContentView(binding.root)
+    override fun onCreateView(
+        inflater: LayoutInflater,
+        container: ViewGroup?,
+        savedInstanceState: Bundle?
+    ): View {
+        _binding = FragmentPhotoHomeBinding.inflate(inflater, container, false)
+        return binding.root
+    }
 
-        WindowCompat.getInsetsController(window, binding.root).apply {
-            isAppearanceLightStatusBars = false
-            isAppearanceLightNavigationBars = false
+    override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
+        super.onViewCreated(view, savedInstanceState)
+        val app = requireActivity().application as LessApp
+        lastSettingsSignature = settingsSignature()
+        viewModel.state.value.let { state ->
+            if (!state.loading) render(state)
+        }
+
+        binding.favoritesButton.setOnClickListener {
+            startActivity(Intent(requireContext(), FavoritesActivity::class.java))
+        }
+        binding.settingsButton.setOnClickListener {
+            startActivity(Intent(requireContext(), SettingsActivity::class.java))
+        }
+        binding.emptyRefresh.setOnClickListener {
+            viewModel.load(force = true)
         }
 
         setupInsets()
-        binding.back.setOnClickListener { finish() }
-        binding.refresh.setOnClickListener { viewModel.load(force = true) }
-        binding.emptyRefresh.setOnClickListener { viewModel.load(force = true) }
-        binding.subtitle.text = getString(R.string.photo_subtitle)
-
-        binding.navPhotos.isSelected = true
-        binding.navVideos.setOnClickListener {
-            VideoFeedSession.items = emptyList()
-            VideoFeedSession.startIndex = 0
-            startActivity(Intent(this, VideoFeedActivity::class.java))
-        }
-        binding.navStats.setOnClickListener {
-            startActivity(Intent(this, StatsActivity::class.java))
-        }
-
         observeState()
     }
 
     override fun onResume() {
         super.onResume()
-        if (MediaAccess.mode(this) == com.kkorpse.less.util.AccessMode.NONE) {
-            Toast.makeText(this, R.string.permission_denied_message, Toast.LENGTH_SHORT).show()
-            finish()
+        val signature = settingsSignature()
+        if (lastSettingsSignature.isNotEmpty() && signature != lastSettingsSignature) {
+            lastSettingsSignature = signature
+            viewModel.load(force = true)
+        } else {
+            lastSettingsSignature = signature
         }
+    }
+
+    override fun onDestroyView() {
+        _binding = null
+        super.onDestroyView()
+    }
+
+    private fun settingsSignature(): String {
+        val prefs = (requireActivity().application as LessApp).preferences
+        return "${prefs.groupSize}-${prefs.browseMode}"
     }
 
     private fun setupInsets() {
@@ -85,15 +103,14 @@ class PhotoHomeActivity : AppCompatActivity() {
             val bars = insets.getInsets(
                 WindowInsetsCompat.Type.systemBars() or WindowInsetsCompat.Type.displayCutout()
             )
-            binding.header.updatePadding(top = dp(10) + bars.top)
-            binding.root.updatePadding(bottom = bars.bottom)
+            binding.topBar.updatePadding(top = requireContext().dp(12) + bars.top)
             insets
         }
     }
 
     private fun observeState() {
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.state.collect { state ->
                     render(state)
                 }
@@ -102,24 +119,39 @@ class PhotoHomeActivity : AppCompatActivity() {
     }
 
     private fun render(state: PhotoHomeState) {
+        binding.countBadge.text = if (state.photos.isEmpty()) "0" else state.photos.size.toString()
         binding.loading.isVisible = state.loading && state.photos.isEmpty()
         binding.emptyPanel.isVisible = !state.loading && state.photos.isEmpty()
         binding.photoContent.isVisible = state.photos.isNotEmpty()
 
-        if (state.photos.isEmpty()) return
+        if (state.photos.isEmpty()) {
+            binding.background.setImageDrawable(null)
+            return
+        }
 
-        val app = application as LessApp
+        val app = requireActivity().application as LessApp
         val modeLabel = when (app.preferences.browseMode) {
             BrowseMode.RANDOM -> getString(R.string.browse_random)
             BrowseMode.SEQUENTIAL -> getString(R.string.browse_sequential)
         }
-        binding.hint.text = getString(
+        binding.galleryPill.contentDescription = getString(
             R.string.photo_hint,
             app.preferences.groupSize,
             modeLabel
         )
 
         val photos = state.photos
+        binding.background.load(photos[0].uri) {
+            crossfade(200)
+            placeholder(R.drawable.bg_thumb_placeholder)
+            size(256, 256)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            binding.background.setRenderEffect(
+                RenderEffect.createBlurEffect(42f, 42f, Shader.TileMode.CLAMP)
+            )
+        }
+
         binding.cardCenter.isVisible = true
         binding.cardLeft.isVisible = photos.size >= 2
         binding.cardRight.isVisible = photos.size >= 3
@@ -131,7 +163,7 @@ class PhotoHomeActivity : AppCompatActivity() {
         applyCardTransform(binding.cardLeft, -1f)
         applyCardTransform(binding.cardRight, 1f)
         binding.cardCenter.translationX = 0f
-        binding.cardCenter.translationY = -dp(8).toFloat()
+        binding.cardCenter.translationY = -requireContext().dp(8).toFloat()
         binding.cardCenter.rotation = 0f
     }
 
@@ -150,7 +182,7 @@ class PhotoHomeActivity : AppCompatActivity() {
     private fun applyCardTransform(card: ShapeableImageView, direction: Float) {
         val offset = resources.getDimensionPixelSize(R.dimen.photo_card_offset)
         card.translationX = direction * offset
-        card.translationY = dp(8).toFloat()
+        card.translationY = requireContext().dp(8).toFloat()
         card.rotation = direction * 9f
     }
 
@@ -160,6 +192,6 @@ class PhotoHomeActivity : AppCompatActivity() {
         PhotoFocusSession.items = photos
         PhotoFocusSession.startIndex = index.coerceIn(photos.indices)
         PhotoFocusSession.canTrash = true
-        focusLauncher.launch(Intent(this, PhotoFocusActivity::class.java))
+        focusLauncher.launch(Intent(requireContext(), PhotoFocusActivity::class.java))
     }
 }
