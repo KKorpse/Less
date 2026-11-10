@@ -2,112 +2,108 @@ package com.kkorpse.less.ui
 
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
-import androidx.lifecycle.viewModelScope
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.data.MediaItem
-import com.kkorpse.less.data.MediaRepository
-import com.kkorpse.less.data.PhotoGroupBuilder
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-
-data class PhotoUndoEntry(
-    val item: MediaItem,
-    val index: Int
-)
 
 class PhotoFocusViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as LessApp
-    private val builder = PhotoGroupBuilder(
-        MediaRepository(application),
-        app.preferences,
-        app.browseStore
-    )
 
-    private val _items = MutableStateFlow<List<MediaItem>>(emptyList())
-    val items = _items.asStateFlow()
+    private val photoPages = mutableListOf<FocusPage.Photo>()
+    private val pending = mutableListOf<PendingDelete>()
+    private val deleted = mutableListOf<PendingDelete>()
+    private var busy = false
 
-    private val _canUndo = MutableStateFlow(false)
-    val canUndo = _canUndo.asStateFlow()
+    private val _pages = MutableStateFlow<List<FocusPage>>(emptyList())
+    val pages = _pages.asStateFlow()
 
-    private val undoStack = ArrayDeque<PhotoUndoEntry>()
-    private val removedUris = mutableSetOf<String>()
-
-    var currentIndex: Int = 0
-    var canTrash: Boolean = true
+    var groupSize: Int = 0
         private set
 
-    private var initialized = false
-    private var appending = false
-    private var noMore = false
-    private var autoAppend = true
+    var currentIndex: Int = 0
 
-    fun initialize(
-        items: List<MediaItem>,
-        startIndex: Int,
-        canTrash: Boolean,
-        autoAppend: Boolean
-    ) {
+    private var initialized = false
+
+    fun initialize(items: List<MediaItem>, startIndex: Int) {
         if (initialized) return
         initialized = true
-        _items.value = items
-        currentIndex = startIndex.coerceIn(0, (items.size - 1).coerceAtLeast(0))
-        this.canTrash = canTrash
-        this.autoAppend = autoAppend
+        groupSize = items.size
+        items.forEachIndexed { index, item ->
+            photoPages += FocusPage.Photo(item, index)
+        }
+        currentIndex = startIndex.coerceIn(0, items.lastIndex.coerceAtLeast(0))
+        emit()
     }
 
-    fun appendIfNeeded(position: Int) {
-        if (!initialized || !autoAppend || appending || noMore) return
-        val current = _items.value
-        if (position < current.size - 3) return
+    fun markForDeletion(page: FocusPage.Photo): Boolean {
+        if (deleted.isNotEmpty()) return false
+        val index = photoPages.indexOfFirst { it.item.uri == page.item.uri }
+        if (index == -1) return false
+        photoPages.removeAt(index)
+        pending += PendingDelete(page.item, page.originalIndex)
+        emit()
+        return true
+    }
 
-        appending = true
-        viewModelScope.launch {
-            builder.appendGroup(current)
-                .onSuccess { group ->
-                    val existing = _items.value.map { it.uri.toString() }.toSet()
-                    val added = group.filter {
-                        val key = it.uri.toString()
-                        key !in existing && key !in removedUris
-                    }
-                    if (added.isEmpty()) {
-                        noMore = true
-                    } else {
-                        _items.value = _items.value + added
-                    }
-                }
-                .onFailure {
-                    noMore = true
-                }
-            appending = false
+    fun undoLastPending(): PendingDelete? {
+        val entry = pending.removeLastOrNull() ?: return null
+        insertPhoto(entry)
+        emit()
+        return entry
+    }
+
+    fun setBatchBusy(value: Boolean) {
+        if (busy == value) return
+        busy = value
+        emit()
+    }
+
+    fun markBatchDeleted() {
+        if (pending.isEmpty()) return
+        pending.forEach { app.browseStore.onTrashed(false) }
+        deleted += pending
+        pending.clear()
+        busy = false
+        emit()
+    }
+
+    fun undoBatchDeleted() {
+        if (deleted.isEmpty()) return
+        deleted.forEach {
+            insertPhoto(it)
+            app.browseStore.onRestored(false)
+        }
+        deleted.clear()
+        busy = false
+        emit()
+    }
+
+    fun pendingEntries(): List<PendingDelete> = pending.toList()
+
+    fun deletedEntries(): List<PendingDelete> = deleted.toList()
+
+    fun photoPageIndexOf(originalIndex: Int): Int =
+        photoPages.indexOfFirst { it.originalIndex == originalIndex }
+
+    private fun insertPhoto(entry: PendingDelete) {
+        val page = FocusPage.Photo(entry.item, entry.originalIndex)
+        val insertAt = photoPages.indexOfFirst { it.originalIndex > entry.originalIndex }
+        if (insertAt == -1) {
+            photoPages += page
+        } else {
+            photoPages.add(insertAt, page)
         }
     }
 
-    fun peekUndo(): PhotoUndoEntry? = undoStack.lastOrNull()
-
-    fun confirmTrash(item: MediaItem, index: Int) {
-        removedUris += item.uri.toString()
-        app.browseStore.onTrashed(false)
-        undoStack.addLast(PhotoUndoEntry(item, index))
-        _canUndo.value = true
-
-        val next = _items.value.filterNot { it.uri == item.uri }
-        _items.value = next
-        currentIndex = currentIndex.coerceAtMost((next.size - 1).coerceAtLeast(0))
-    }
-
-    fun confirmRestore(item: MediaItem, index: Int) {
-        removedUris -= item.uri.toString()
-        app.browseStore.onRestored(false)
-
-        val next = _items.value.toMutableList()
-        val insertAt = index.coerceIn(0, next.size)
-        next.add(insertAt, item)
-        _items.value = next
-        currentIndex = insertAt
-
-        if (undoStack.isNotEmpty()) undoStack.removeLast()
-        _canUndo.value = undoStack.isNotEmpty()
+    private fun emit() {
+        _pages.value = photoPages.toList() + FocusPage.Summary(
+            pending = pending.toList(),
+            deleted = deleted.toList(),
+            busy = busy,
+            groupSize = groupSize
+        )
+        currentIndex = currentIndex.coerceIn(0, (_pages.value.size - 1).coerceAtLeast(0))
     }
 }

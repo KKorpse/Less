@@ -12,39 +12,19 @@ class PhotoGroupBuilder(
 
     suspend fun newGroup(): Result<List<MediaItem>> {
         return repository.loadPhotos().map { photos ->
-            selectGroup(
-                photos = photos,
-                size = preferences.groupSize,
-                mode = preferences.browseMode,
-                excludeUris = emptySet()
-            )
-        }
-    }
-
-    suspend fun appendGroup(existing: List<MediaItem>): Result<List<MediaItem>> {
-        return repository.loadPhotos().map { photos ->
-            selectGroup(
-                photos = photos,
-                size = preferences.groupSize,
-                mode = preferences.browseMode,
-                excludeUris = existing.map { it.uri.toString() }.toSet()
-            )
+            selectGroup(photos, preferences.groupSize, preferences.browseMode)
         }
     }
 
     private fun selectGroup(
         photos: List<MediaItem>,
         size: Int,
-        mode: BrowseMode,
-        excludeUris: Set<String>
+        mode: BrowseMode
     ): List<MediaItem> {
         if (photos.isEmpty() || size <= 0) return emptyList()
 
-        val pool = photos.filter { it.uri.toString() !in excludeUris }
-        if (pool.isEmpty()) return emptyList()
-
         return when (mode) {
-            BrowseMode.RANDOM -> pool.shuffled().take(size)
+            BrowseMode.RANDOM -> photos.shuffled().take(size)
 
             BrowseMode.SEQUENTIAL -> {
                 val start = store.sequentialCursor % photos.size
@@ -52,10 +32,7 @@ class PhotoGroupBuilder(
                 var index = start
                 var visited = 0
                 while (visited < photos.size && selected.size < size) {
-                    val item = photos[index]
-                    if (item.uri.toString() !in excludeUris) {
-                        selected += item
-                    }
+                    selected += photos[index]
                     index = (index + 1) % photos.size
                     visited++
                 }

@@ -25,7 +25,38 @@
     <string name="favorited">已收藏</string>
     <string name="undo">撤回</string>
     <string name="delete">删除</string>
-    <string name="up_swipe_hint">上滑删除</string>
+    <string name="favorite_content_desc">收藏</string>
+    <string name="unfavorite_content_desc">取消收藏</string>
+    <string name="undo_content_desc">撤回上一张删除标记</string>
+
+    <string name="info_position_time">%1$d / %2$d · %3$s</string>
+    <string name="location_loading">正在读取拍摄地点…</string>
+    <string name="location_unknown">未记录拍摄地点</string>
+    <string name="location_permission_missing">未授权读取拍摄地点</string>
+    <string name="location_permission_title">显示拍摄地点</string>
+    <string name="location_permission_message">允许 Less 读取照片中的位置信息，用来在照片下方显示拍摄地址。拒绝也可以继续浏览。</string>
+    <string name="location_permission_allow">允许</string>
+    <string name="location_permission_not_now">暂不</string>
+
+    <string name="summary_title_done">本组已看完</string>
+    <string name="summary_title_deleted">已移入系统回收站</string>
+    <string name="summary_pending">标记了 %1$d 张照片待删除</string>
+    <string name="summary_empty">没有标记删除的照片</string>
+    <string name="summary_deleted_count">%1$d 张照片已移入回收站</string>
+    <string name="summary_group_info">本组共 %1$d 张</string>
+    <string name="summary_delete_n">删除 %1$d 张</string>
+    <string name="summary_keep">暂不删除</string>
+    <string name="summary_finish">完成</string>
+    <string name="summary_review">返回照片</string>
+    <string name="summary_undo_delete">撤回删除</string>
+    <string name="summary_busy">处理中…</string>
+    <string name="summary_more">+%1$d</string>
+    <string name="summary_finish_first">请先撤回已删除的照片或完成本组</string>
+
+    <string name="batch_trash_success">已移入系统回收站</string>
+    <string name="batch_restore_success">已从回收站恢复</string>
+    <string name="batch_trash_failed">无法移入系统回收站</string>
+    <string name="batch_restore_failed">无法撤回删除</string>
 
     <string name="stats_title">统计</string>
     <string name="stats_photos">照片</string>
@@ -52,7 +83,8 @@
     <string name="settings_mode_sequential">顺序</string>
     <string name="settings_note_section">说明</string>
     <string name="settings_favorites_note">收藏保存在 Less 本地，可以从首页右上角的心形入口查看。ColorOS 系统“收藏”相册没有向第三方应用开放写入接口。</string>
-    <string name="settings_delete_note">删除会调用系统回收站，Android 会弹出确认；撤回会请求恢复最近删除的内容。</string>
+    <string name="settings_delete_note">照片上滑只会标记待删除；本组看完后在汇总页统一确认，再调用系统回收站。视频仍在右侧直接删除/撤回。</string>
+    <string name="settings_location_note">照片气泡里的拍摄地址来自照片内置 GPS，首次进入照片浏览时会请求读取照片位置信息。没有 GPS 或无法解析时显示“未记录拍摄地点”或坐标。</string>
     <string name="settings_version">Less %1$s</string>
 
     <string name="favorites_title">收藏</string>

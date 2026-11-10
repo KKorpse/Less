@@ -1,24 +1,20 @@
 package com.kkorpse.less.ui
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.graphics.Canvas
-import android.graphics.Color
-import android.graphics.Paint
-import android.graphics.RectF
-import android.graphics.drawable.Drawable
 import android.os.Bundle
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
-import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.isVisible
-import androidx.core.view.updatePadding
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -26,13 +22,16 @@ import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.PagerSnapHelper
 import androidx.recyclerview.widget.RecyclerView
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaItem
 import com.kkorpse.less.data.PhotoFocusSession
 import com.kkorpse.less.databinding.ActivityPhotoFocusBinding
 import com.kkorpse.less.util.Format
+import com.kkorpse.less.util.PhotoLocationResolver
 import com.kkorpse.less.util.dp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class PhotoFocusActivity : AppCompatActivity() {
@@ -42,18 +41,18 @@ class PhotoFocusActivity : AppCompatActivity() {
 
     private lateinit var adapter: PhotoFocusAdapter
     private lateinit var layoutManager: LinearLayoutManager
-    private lateinit var trashController: TrashController
+    private lateinit var batchController: BatchTrashController
+    private val locationResolver = PhotoLocationResolver()
 
     private var initialScrollDone = false
     private var pendingScrollIndex: Int? = null
+    private var pendingScrollOriginalIndex: Int? = null
+    private var locationJob: Job? = null
 
-    private val swipePaint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val cardInset by lazy { dp(10).toFloat() }
-    private val cardRadius by lazy { dp(24).toFloat() }
-    private val trashIcon: Drawable? by lazy {
-        ContextCompat.getDrawable(this, R.drawable.ic_delete)?.mutate()?.also {
-            DrawableCompat.setTint(it, Color.WHITE)
-        }
+    private val locationLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) {
+        updateCurrent()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -69,16 +68,16 @@ class PhotoFocusActivity : AppCompatActivity() {
         binding = ActivityPhotoFocusBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        viewModel.initialize(
-            session.items,
-            session.startIndex,
-            session.canTrash,
-            session.autoAppend
-        )
+        viewModel.initialize(session.items, session.startIndex)
         val app = application as LessApp
-        adapter = PhotoFocusAdapter(app.preferences.doubleTapAction) { item ->
-            toggleFavorite(item)
-        }
+        adapter = PhotoFocusAdapter(
+            doubleTapAction = app.preferences.doubleTapAction,
+            onFavorite = ::toggleFavorite,
+            onBatchDelete = ::requestBatchDelete,
+            onFinish = { finish() },
+            onUndoBatch = ::requestBatchUndo,
+            onReview = ::reviewPhotos
+        )
 
         layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
         binding.pager.layoutManager = layoutManager
@@ -94,15 +93,21 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
 
         setupInsets()
-        setupSwipe()
         setupActions()
+        setupSwipe()
 
-        trashController = TrashController(this) { request, success ->
-            handleTrashResult(request, success)
+        batchController = BatchTrashController(this) { trash, success ->
+            handleBatchResult(trash, success)
         }
 
-        observeItems()
-        updateOverlay()
+        observePages()
+        updateCurrent()
+        maybeRequestLocationPermission()
+    }
+
+    override fun onDestroy() {
+        locationJob?.cancel()
+        super.onDestroy()
     }
 
     private fun setupInsets() {
@@ -112,8 +117,6 @@ class PhotoFocusActivity : AppCompatActivity() {
             )
             (binding.back.layoutParams as FrameLayout.LayoutParams).topMargin =
                 dp(12) + bars.top
-            (binding.counter.layoutParams as FrameLayout.LayoutParams).topMargin =
-                dp(18) + bars.top
             (binding.bottomBar.layoutParams as FrameLayout.LayoutParams).bottomMargin =
                 bars.bottom
             insets
@@ -123,9 +126,9 @@ class PhotoFocusActivity : AppCompatActivity() {
     private fun setupActions() {
         binding.back.setOnClickListener { finish() }
         binding.favoriteButton.setOnClickListener {
-            currentItem()?.let { toggleFavorite(it) }
+            currentPhoto()?.let { toggleFavorite(it) }
         }
-        binding.undoButton.setOnClickListener { undoLast() }
+        binding.undoButton.setOnClickListener { undoLastMark() }
         binding.pager.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
@@ -137,37 +140,34 @@ class PhotoFocusActivity : AppCompatActivity() {
 
     private fun setupSwipe() {
         val callback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.UP) {
+            override fun getMovementFlags(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder
+            ): Int {
+                val page = adapter.currentList.getOrNull(viewHolder.bindingAdapterPosition)
+                return if (page is FocusPage.Photo) {
+                    makeMovementFlags(0, ItemTouchHelper.UP)
+                } else {
+                    0
+                }
+            }
+
             override fun onMove(
                 recyclerView: RecyclerView,
                 viewHolder: RecyclerView.ViewHolder,
                 target: RecyclerView.ViewHolder
             ): Boolean = false
 
-            override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = 0.28f
-
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
                 val position = viewHolder.bindingAdapterPosition
-                if (position == RecyclerView.NO_POSITION) return
-                val item = adapter.currentList.getOrNull(position) ?: return
-                if (!viewModel.canTrash) {
-                    adapter.notifyItemChanged(position)
-                    return
-                }
-                if (trashController.isBusy) {
-                    adapter.notifyItemChanged(position)
-                    return
-                }
-
-                // 先让卡片回到原位，系统确认框结束后再决定移除还是保留。
-                binding.pager.post {
-                    if (position < adapter.itemCount) adapter.notifyItemChanged(position)
-                }
-                trashController.request(item, trash = true, index = position)
-                refreshUndo()
+                val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
+                markForDeletion(position, page)
             }
 
+            override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = 0.24f
+
             override fun onChildDraw(
-                canvas: Canvas,
+                canvas: android.graphics.Canvas,
                 recyclerView: RecyclerView,
                 viewHolder: RecyclerView.ViewHolder,
                 dX: Float,
@@ -175,35 +175,18 @@ class PhotoFocusActivity : AppCompatActivity() {
                 actionState: Int,
                 isCurrentlyActive: Boolean
             ) {
-                if (dY < 0f && isCurrentlyActive) {
-                    val itemView = viewHolder.itemView
-                    val rect = RectF(
-                        itemView.left + cardInset,
-                        itemView.top + cardInset,
-                        itemView.right - cardInset,
-                        itemView.bottom - cardInset
-                    )
-                    val progress = (-dY / itemView.height.coerceAtLeast(1)).coerceIn(0f, 1f)
-                    swipePaint.color = Color.argb(
-                        (80 + 120 * progress).toInt(),
-                        255,
-                        90,
-                        95
-                    )
-                    canvas.drawRoundRect(rect, cardRadius, cardRadius, swipePaint)
-
-                    trashIcon?.let { icon ->
-                        val size = dp(52)
-                        val cx = rect.centerX()
-                        val cy = rect.centerY()
-                        icon.setBounds(
-                            (cx - size / 2).toInt(),
-                            (cy - size / 2).toInt(),
-                            (cx + size / 2).toInt(),
-                            (cy + size / 2).toInt()
-                        )
-                        icon.alpha = (255 * progress).toInt()
-                        icon.draw(canvas)
+                val card = viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)
+                if (card != null) {
+                    if (isCurrentlyActive && dY < 0f) {
+                        val progress = (-dY / viewHolder.itemView.height.coerceAtLeast(1))
+                            .coerceIn(0f, 1f)
+                        card.scaleX = 1f - 0.18f * progress
+                        card.scaleY = 1f - 0.18f * progress
+                        card.alpha = 1f - 0.78f * progress
+                    } else {
+                        card.scaleX = 1f
+                        card.scaleY = 1f
+                        card.alpha = 1f
                     }
                 }
                 super.onChildDraw(
@@ -216,76 +199,50 @@ class PhotoFocusActivity : AppCompatActivity() {
                     isCurrentlyActive
                 )
             }
+
+            override fun clearView(
+                recyclerView: RecyclerView,
+                viewHolder: RecyclerView.ViewHolder
+            ) {
+                viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)?.let {
+                    it.scaleX = 1f
+                    it.scaleY = 1f
+                    it.alpha = 1f
+                }
+                super.clearView(recyclerView, viewHolder)
+            }
         }
         ItemTouchHelper(callback).attachToRecyclerView(binding.pager)
     }
 
-    private fun observeItems() {
+    private fun observePages() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.items.collect { items ->
-                    adapter.submitList(items) {
+                viewModel.pages.collect { pages ->
+                    adapter.submitList(pages) {
                         if (!initialScrollDone) {
                             initialScrollDone = true
                             scrollTo(viewModel.currentIndex)
                         }
                         pendingScrollIndex?.let { index ->
-                            if (items.isNotEmpty()) {
+                            if (pages.isNotEmpty()) {
                                 pendingScrollIndex = null
                                 scrollTo(index)
                             }
                         }
-                        binding.emptyMessage.isVisible = items.isEmpty()
-                        updateOverlay()
+                        pendingScrollOriginalIndex?.let { originalIndex ->
+                            val index = pages.indexOfFirst {
+                                it is FocusPage.Photo && it.originalIndex == originalIndex
+                            }
+                            if (index >= 0) {
+                                pendingScrollOriginalIndex = null
+                                scrollTo(index)
+                            }
+                        }
+                        updateCurrent()
                     }
                 }
             }
-        }
-    }
-
-    private fun handleTrashResult(request: TrashController.Request, success: Boolean) {
-        if (request.trash) {
-            if (success) {
-                pendingScrollIndex = request.index
-                viewModel.confirmTrash(request.item, request.index)
-                Toast.makeText(this, R.string.trash_success, Toast.LENGTH_SHORT).show()
-                viewModel.appendIfNeeded(request.index)
-            } else {
-                binding.pager.post {
-                    if (request.index < adapter.itemCount) {
-                        adapter.notifyItemChanged(request.index)
-                    }
-                }
-            }
-        } else {
-            if (success) {
-                pendingScrollIndex = request.index
-                viewModel.confirmRestore(request.item, request.index)
-                Toast.makeText(this, R.string.restore_success, Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(this, R.string.restore_failed, Toast.LENGTH_SHORT).show()
-            }
-        }
-        refreshUndo()
-    }
-
-    private fun undoLast() {
-        val entry = viewModel.peekUndo() ?: return
-        if (trashController.isBusy) return
-        trashController.request(entry.item, trash = false, index = entry.index)
-        refreshUndo()
-    }
-
-    private fun toggleFavorite(item: MediaItem) {
-        val app = application as LessApp
-        val favorite = app.browseStore.toggleFavorite(item.uri)
-        Toast.makeText(
-            this,
-            if (favorite) R.string.favorite_added else R.string.favorite_removed,
-            Toast.LENGTH_SHORT
-        ).show()
-        if (currentItem()?.uri == item.uri) {
-            updateFavorite(item)
         }
     }
 
@@ -303,67 +260,175 @@ class PhotoFocusActivity : AppCompatActivity() {
         return layoutManager.findFirstVisibleItemPosition()
     }
 
-    private fun currentItem(): MediaItem? {
+    private fun currentPage(): FocusPage? {
         val position = currentPosition()
         if (position == RecyclerView.NO_POSITION) return null
         return adapter.currentList.getOrNull(position)
     }
 
+    private fun currentPhoto(): MediaItem? = (currentPage() as? FocusPage.Photo)?.item
+
     private fun updateCurrent() {
         val position = currentPosition()
         if (position == RecyclerView.NO_POSITION) {
-            updateOverlay()
+            updateChrome(null)
             return
         }
         viewModel.currentIndex = position
-        val item = adapter.currentList.getOrNull(position)
-        if (item != null) {
-            (application as LessApp).browseStore.markViewed(item.uri, false)
-            updateOverlay(item)
-            viewModel.appendIfNeeded(position)
+        val page = adapter.currentList.getOrNull(position)
+        updateChrome(page)
+        if (page is FocusPage.Photo) {
+            (application as LessApp).browseStore.markViewed(page.item.uri, false)
         }
     }
 
-    private fun updateOverlay(item: MediaItem? = currentItem()) {
-        if (item == null) {
-            binding.counter.text = ""
-            binding.timeLabel.isVisible = false
-            binding.favoriteButton.isEnabled = false
-            binding.favoriteButton.alpha = 0.4f
+    private fun updateChrome(page: FocusPage?) {
+        when (page) {
+            is FocusPage.Photo -> {
+                binding.bottomBar.isVisible = true
+                binding.favoriteButton.isEnabled = true
+                binding.favoriteButton.alpha = 1f
+                updateFavorite(page.item)
+                refreshUndo()
+                updateInfo(page)
+            }
+
+            is FocusPage.Summary -> {
+                locationJob?.cancel()
+                binding.bottomBar.isVisible = false
+            }
+
+            null -> {
+                locationJob?.cancel()
+                binding.bottomBar.isVisible = false
+            }
+        }
+    }
+
+    private fun updateInfo(page: FocusPage.Photo) {
+        binding.infoTitle.text = getString(
+            R.string.info_position_time,
+            page.originalIndex + 1,
+            viewModel.groupSize,
+            Format.relativeTime(page.item.dateMillis)
+        )
+        binding.infoAddress.text = getString(R.string.location_loading)
+
+        locationJob?.cancel()
+        locationJob = lifecycleScope.launch {
+            val address = locationResolver.resolve(this@PhotoFocusActivity, page.item.uri)
+            val current = currentPage() as? FocusPage.Photo
+            if (current?.item?.uri == page.item.uri) {
+                binding.infoAddress.text = address
+            }
+        }
+    }
+
+    private fun maybeRequestLocationPermission() {
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.ACCESS_MEDIA_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            return
+        }
+        val app = application as LessApp
+        if (app.preferences.locationAsked) return
+        app.preferences.locationAsked = true
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.location_permission_title)
+            .setMessage(R.string.location_permission_message)
+            .setPositiveButton(R.string.location_permission_allow) { _, _ ->
+                locationLauncher.launch(Manifest.permission.ACCESS_MEDIA_LOCATION)
+            }
+            .setNegativeButton(R.string.location_permission_not_now, null)
+            .show()
+    }
+
+    private fun toggleFavorite(item: MediaItem) {
+        (application as LessApp).browseStore.toggleFavorite(item.uri)
+        if (currentPhoto()?.uri == item.uri) {
+            updateFavorite(item)
+        }
+    }
+
+    private fun updateFavorite(item: MediaItem) {
+        val favorite = (application as LessApp).browseStore.isFavorite(item.uri)
+        binding.favoriteButton.setImageResource(
+            if (favorite) R.drawable.ic_heart_filled else R.drawable.ic_heart
+        )
+        binding.favoriteButton.imageTintList = ColorStateList.valueOf(
+            ContextCompat.getColor(this, if (favorite) R.color.heart else R.color.accent)
+        )
+        binding.favoriteButton.contentDescription = getString(
+            if (favorite) R.string.unfavorite_content_desc else R.string.favorite_content_desc
+        )
+    }
+
+    private fun markForDeletion(position: Int, page: FocusPage.Photo) {
+        if (batchController.isBusy) return
+        pendingScrollIndex = position
+        if (viewModel.markForDeletion(page)) {
+            binding.pager.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+        } else {
+            pendingScrollIndex = null
+            binding.pager.post {
+                if (position < adapter.itemCount) adapter.notifyItemChanged(position)
+            }
+            Toast.makeText(this, R.string.summary_finish_first, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun undoLastMark() {
+        if (batchController.isBusy) return
+        val entry = viewModel.undoLastPending() ?: return
+        pendingScrollOriginalIndex = entry.originalIndex
+    }
+
+    private fun refreshUndo() {
+        val enabled = viewModel.pendingEntries().isNotEmpty() && !batchController.isBusy
+        binding.undoButton.isEnabled = enabled
+        binding.undoButton.alpha = if (enabled) 1f else 0.4f
+    }
+
+    private fun requestBatchDelete() {
+        val pending = viewModel.pendingEntries()
+        if (pending.isEmpty() || batchController.isBusy) return
+        viewModel.setBatchBusy(true)
+        batchController.request(pending.map { it.item }, trash = true)
+        refreshUndo()
+    }
+
+    private fun requestBatchUndo() {
+        val deleted = viewModel.deletedEntries()
+        if (deleted.isEmpty() || batchController.isBusy) return
+        pendingScrollOriginalIndex = deleted.lastOrNull()?.originalIndex
+        viewModel.setBatchBusy(true)
+        batchController.request(deleted.map { it.item }, trash = false)
+    }
+
+    private fun handleBatchResult(trash: Boolean, success: Boolean) {
+        if (!success) {
+            viewModel.setBatchBusy(false)
             refreshUndo()
             return
         }
 
-        binding.counter.text = getString(
-            R.string.viewer_position,
-            viewModel.currentIndex + 1,
-            adapter.itemCount
-        )
-        binding.timeLabel.isVisible = true
-        binding.timeLabel.text = Format.relativeTime(item.dateMillis)
-        binding.favoriteButton.isEnabled = true
-        binding.favoriteButton.alpha = 1f
-        updateFavorite(item)
+        if (trash) {
+            viewModel.markBatchDeleted()
+            Toast.makeText(this, R.string.batch_trash_success, Toast.LENGTH_SHORT).show()
+        } else {
+            val deleted = viewModel.deletedEntries()
+            pendingScrollOriginalIndex = deleted.lastOrNull()?.originalIndex
+            viewModel.undoBatchDeleted()
+            Toast.makeText(this, R.string.batch_restore_success, Toast.LENGTH_SHORT).show()
+        }
         refreshUndo()
     }
 
-    private fun updateFavorite(item: MediaItem) {
-        val app = application as LessApp
-        val favorite = app.browseStore.isFavorite(item.uri)
-        binding.favoriteIcon.setImageResource(
-            if (favorite) R.drawable.ic_heart_filled else R.drawable.ic_heart
-        )
-        binding.favoriteIcon.imageTintList = ColorStateList.valueOf(
-            ContextCompat.getColor(this, if (favorite) R.color.heart else R.color.accent)
-        )
-        binding.favoriteLabel.text = getString(
-            if (favorite) R.string.favorited else R.string.favorite
-        )
-    }
-
-    private fun refreshUndo() {
-        val enabled = viewModel.canUndo.value && !trashController.isBusy
-        binding.undoButton.isEnabled = enabled
-        binding.undoButton.alpha = if (enabled) 1f else 0.4f
+    private fun reviewPhotos() {
+        val index = viewModel.pages.value.indexOfLast { it is FocusPage.Photo }
+        if (index >= 0) scrollTo(index)
     }
 }

@@ -2,7 +2,7 @@
 
 为 **OPPO Pad Mini（OPD2515，ColorOS 16 / Android 16 / API 36）** 做的本机相册。界面克制、暗色、无广告、无 `INTERNET` 权限。
 
-2.0 版本从「图库网格」改成了以浏览动作为中心的结构：首页进入照片、视频、统计；照片按组以扑克牌形式进入专注浏览；视频是抖音式纵向流。
+2.0 版本以浏览动作为中心：首页进入照片、视频、统计；照片按组以扑克牌形式进入专注浏览；视频是抖音式纵向流。
 
 ## 功能
 
@@ -10,26 +10,33 @@
 
 - 底部三个入口：**照片 / 视频 / 统计**
 - 右上角：**收藏**、**设置**
-- 部分照片授权时，顶部显示「仅显示你已选择的照片和视频」和「管理」入口
+- 部分照片授权时，顶部显示「仅显示你已选择的照片和视频」和「管理」
 
 ### 照片
 
-- 默认展示三张照片，像扑克牌一样重叠
-- 点击任意卡片进入专注浏览
+- 三张照片像扑克牌一样重叠；底部 bar 同时显示，不冲突
+- 只有点击三张卡片才进入专注浏览
 - 按设置中的「每组数量」取一组照片；随机或顺序
-- 左右滑动切换，**上滑移入系统回收站**
-- 四角圆角卡片，滑动跟手
-- 左下角收藏，右下角撤回，左上角返回照片首页
-- 底部中间显示相对时间（今天 / N 天前 / N 周前 / N 个月前 / N 年前）
-- 普通照片组浏览到接近组尾时会自动补下一组；收藏列表不会补全整组图库
-- 双击手势可在设置中选「收藏」或「放大」；双指缩放始终可用
+- 左右滑动切换
+- **上滑不是立即删除**：卡片会缩小、淡出、向上消失，并标记为待删除；可以连续标记多张
+- 整组浏览到最后一页后，进入汇总页：显示待删除数量和缩略图，一次性确认
+- 确认后通过系统回收站批量删除；系统只弹一次确认
+- 汇总页删除后可以「撤回删除」，批量从回收站恢复
+- 专注页左下角是一个圆形收藏按钮（桃心），右下角是一个圆形撤回按钮（返回箭头），都不带文字
+- 撤回按钮恢复最近一次标记，而不是立即操作系统删除
+- 中间信息气泡与两侧圆按钮等高，两行内容：
+  - 第一行加粗：`当前序号 / 组内总数 · 相对时间`
+  - 第二行小一号灰色：照片拍摄地址
+- 地址来自照片 EXIF GPS，首次进入照片专注时会请求一次位置权限
+- 没有 GPS 时显示「未记录拍摄地点」；无法反查地址时回退为坐标
+- 普通照片组不会无限补组；到组尾就进入汇总页，处理完回到照片首页进入下一组
 
 ### 视频
 
 - 进入即自动播放第一个视频，上下滑动切换
 - 抖音式纵向全屏流，当前视频循环播放
 - 右侧由上到下：**收藏 / 删除 / 撤回**
-- 删除调用系统回收站，撤回请求恢复最近一次删除
+- 视频仍是即时删除：调用系统回收站，撤回请求恢复最近一次删除
 - 底部左侧显示文件名、相对时间和视频时长
 - 底部有一条播放进度线
 
@@ -53,18 +60,24 @@
 
 - Android 13+：`READ_MEDIA_IMAGES` + `READ_MEDIA_VIDEO`
 - Android 14+：额外申请 `READ_MEDIA_VISUAL_USER_SELECTED`，系统弹窗会出现 **Allow limited access / Allow all**
-- 拒绝权限时可以继续用系统 Photo Picker 临时浏览
+- 拒绝媒体权限时可以继续用系统 Photo Picker 临时浏览
+- 拍摄地址：`ACCESS_MEDIA_LOCATION`，在第一次进入照片专注时单独询问，只问一次
 - 只有点击界面按钮时才请求权限，不会每次启动反复弹窗
 
 ## 收藏与删除说明
 
-**收藏**保存在 Less 本地。ColorOS / Android 系统相册的「收藏」相册没有向第三方应用开放写入接口，所以第三方应用无法可靠地把照片直接塞进 OPPO 相册的收藏夹。本版的做法是：
+**收藏**保存在 Less 本地。ColorOS / Android 系统相册的「收藏」相册没有向第三方应用开放写入接口，第三方应用无法可靠地把照片直接塞进 OPPO 相册的收藏夹。本版：
 
 - 收藏状态保存在本机
 - 首页右上角心形入口集中查看收藏
 - 若后续需要同步系统收藏，可以接入 `MediaStore.createFavoriteRequest`，但 Android 会为每次操作弹系统确认
 
-**删除**使用 `MediaStore.createTrashRequest`，真正进入系统回收站，而不是直接永久删除。第三方应用操作其他应用创建的媒体时，Android 会弹出确认框；这是系统安全机制，不是应用多此一举。撤回同理，会请求把项目从回收站移出。
+**照片删除**分两步：
+
+1. 上滑只做标记，卡片缩小淡出，不打扰系统；
+2. 组尾汇总页确认后，调用 `MediaStore.createTrashRequest` 批量移入系统回收站。
+
+第三方应用操作其他应用创建的媒体时，Android 会弹出确认框，这是系统安全机制。视频仍然是右侧按钮即时删除/撤回。
 
 ## 环境
 
@@ -72,7 +85,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.0.2（versionCode 4） |
+| 当前版本 | 2.0.3（versionCode 5） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -80,6 +93,7 @@
 | 图片加载 | Coil 3（含视频抽帧） |
 | 视频播放 | Media3 ExoPlayer 1.7.1 |
 | 手势缩放 | PhotoView 2.3.0 |
+| EXIF / 地址 | androidx.exifinterface + Android Geocoder |
 
 应用不含 `.so` 原生库，兼容 Android 15 / 16 的 16 KB 页大小设备。
 
@@ -93,23 +107,24 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.0.2-debug.apk
+app/build/outputs/apk/debug/Less-v2.0.3-debug.apk
 ```
 
-仓库的 `dist/` 保留了每个版本的 APK：
+仓库的 `dist/` 保留每个版本：
 
 ```
 dist/Less-v1.0.0-debug.apk
 dist/Less-v2.0.0-debug.apk
 dist/Less-v2.0.1-debug.apk
 dist/Less-v2.0.2-debug.apk
+dist/Less-v2.0.3-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.0.2-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.0.3-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -128,6 +143,7 @@ dist/SHA256SUMS.txt
 | `READ_MEDIA_IMAGES` | Android 13+ 读取照片 |
 | `READ_MEDIA_VIDEO` | Android 13+ 读取视频 |
 | `READ_MEDIA_VISUAL_USER_SELECTED` | Android 14+ 选择部分照片授权 |
+| `ACCESS_MEDIA_LOCATION` | 读取照片 EXIF GPS，用于显示拍摄地址 |
 | `READ_EXTERNAL_STORAGE` | 仅 Android 10–12 使用（`maxSdkVersion=32`） |
 
 没有 `INTERNET`，没有 `MANAGE_EXTERNAL_STORAGE`，不绕过系统媒体库。
@@ -138,12 +154,15 @@ dist/SHA256SUMS.txt
 - Android 16 平板模拟器（Pixel Tablet，2560×1600，API 36）：
   - 权限弹窗确认出现「Allow limited access / Allow all」
   - 全部授权、部分授权均可用
-  - 首页、三张卡片、照片专注、左右滑动、上滑系统回收站、撤回、收藏、相对时间
+  - 照片页三张卡片 + 底部 bar 同时显示
+  - 连续上滑标记 3 张不弹系统框，不再卡在第二张
+  - 组尾汇总页显示待删除数量和缩略图
+  - 一次系统确认批量删除 3 张；汇总页撤回后批量恢复
+  - 圆形收藏/撤回按钮、双行信息气泡、地址 fallback
   - 视频流自动播放、上下滑动、右侧收藏/删除/撤回
   - 收藏页照片/视频
   - 统计总数/已查看/已删除、重置浏览记录
   - 设置页与切换按钮
-- 用户手动测试进行中；发现问题继续递增版本号（2.0.3、2.0.4…）。
 
 ## 项目结构
 
@@ -157,14 +176,16 @@ app/src/main/java/com/kkorpse/less/
 │   ├── BrowseSessions.kt            # 照片组 / 视频流会话
 │   └── PhotoGroupBuilder.kt         # 随机/顺序抽组
 ├── prefs/
-│   ├── AppPreferences.kt            # 每组数量、双击手势、浏览模式
+│   ├── AppPreferences.kt            # 每组数量、双击手势、浏览模式、位置权限询问
 │   └── BrowseStore.kt               # 已查看、收藏、删除计数、顺序游标
 ├── ui/
 │   ├── MainActivity.kt              # 首页 + 权限
-│   ├── PhotoHomeActivity.kt         # 三张扑克牌
+│   ├── PhotoHomeActivity.kt         # 三张扑克牌 + 底部 bar
+│   ├── PhotoFocusPage.kt            # 照片页 / 汇总页
 │   ├── PhotoFocusActivity.kt        # 照片专注浏览
 │   ├── PhotoFocusAdapter.kt
-│   ├── PhotoFocusViewModel.kt
+│   ├── PhotoFocusViewModel.kt       # 标记删除、撤销、批量汇总状态
+│   ├── BatchTrashController.kt      # 批量系统回收站
 │   ├── VideoFeedActivity.kt         # 抖音式视频流
 │   ├── VideoFeedAdapter.kt
 │   ├── VideoFeedViewModel.kt
@@ -176,9 +197,10 @@ app/src/main/java/com/kkorpse/less/
 │   ├── GalleryAdapter.kt            # 收藏页网格
 │   ├── FocusCardLayout.kt           # 未缩放时把滑动交给 RecyclerView
 │   ├── SquareFrameLayout.kt
-│   └── TrashController.kt           # 系统回收站删除/恢复
+│   └── TrashController.kt           # 视频单个删除/恢复
 └── util/
     ├── MediaAccess.kt
+    ├── PhotoLocationResolver.kt     # EXIF GPS + Geocoder
     ├── Format.kt
     └── Dimens.kt
 ```
@@ -186,6 +208,7 @@ app/src/main/java/com/kkorpse/less/
 ## 已知边界
 
 - 系统相册的「收藏」夹没有公开写入接口，收藏目前只在 Less 内生效。
+- 拍摄地址需要照片自身带 GPS，并需要 `ACCESS_MEDIA_LOCATION`；没有 GPS 或系统无法反查时显示「未记录拍摄地点」或坐标。
 - 删除/撤回需要系统确认；确认框由 Android 媒体提供方绘制，可能是浅色样式。
 - 「已删除」统计的是本应用发起的删除次数；在系统相册里手动删除不会计入。
 - 收藏页只显示当前仍有权限访问、且未被移入回收站的内容。

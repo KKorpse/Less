@@ -24,6 +24,7 @@ import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaItem
 import com.kkorpse.less.data.PhotoFocusSession
+import com.kkorpse.less.data.VideoFeedSession
 import com.kkorpse.less.databinding.ActivityPhotoHomeBinding
 import com.kkorpse.less.prefs.BrowseMode
 import com.kkorpse.less.util.MediaAccess
@@ -57,6 +58,16 @@ class PhotoHomeActivity : AppCompatActivity() {
         binding.refresh.setOnClickListener { viewModel.load(force = true) }
         binding.emptyRefresh.setOnClickListener { viewModel.load(force = true) }
         binding.subtitle.text = getString(R.string.photo_subtitle)
+
+        binding.navPhotos.isSelected = true
+        binding.navVideos.setOnClickListener {
+            VideoFeedSession.items = emptyList()
+            VideoFeedSession.startIndex = 0
+            startActivity(Intent(this, VideoFeedActivity::class.java))
+        }
+        binding.navStats.setOnClickListener {
+            startActivity(Intent(this, StatsActivity::class.java))
+        }
 
         observeState()
     }
@@ -149,7 +160,6 @@ class PhotoHomeActivity : AppCompatActivity() {
         PhotoFocusSession.items = photos
         PhotoFocusSession.startIndex = index.coerceIn(photos.indices)
         PhotoFocusSession.canTrash = true
-        PhotoFocusSession.autoAppend = true
         focusLauncher.launch(Intent(this, PhotoFocusActivity::class.java))
     }
 }

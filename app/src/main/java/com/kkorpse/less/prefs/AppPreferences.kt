@@ -45,6 +45,12 @@ class AppPreferences(context: Context) {
             prefs.edit().putString(KEY_BROWSE_MODE, value.name).apply()
         }
 
+    var locationAsked: Boolean
+        get() = prefs.getBoolean(KEY_LOCATION_ASKED, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_LOCATION_ASKED, value).apply()
+        }
+
     companion object {
         const val MIN_GROUP_SIZE = 3
         const val MAX_GROUP_SIZE = 30
@@ -53,5 +59,6 @@ class AppPreferences(context: Context) {
         private const val KEY_GROUP_SIZE = "group_size"
         private const val KEY_DOUBLE_TAP = "double_tap"
         private const val KEY_BROWSE_MODE = "browse_mode"
+        private const val KEY_LOCATION_ASKED = "location_asked"
     }
 }

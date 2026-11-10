@@ -7,6 +7,8 @@
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
     <!-- Android 14+ partial photo access; enables the "Allow all" option in the system dialog -->
     <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+    <!-- 读取照片内置 GPS，用于显示拍摄地点 -->
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION" />
     <!-- Legacy devices only -->
     <uses-permission
         android:name="android.permission.READ_EXTERNAL_STORAGE"
