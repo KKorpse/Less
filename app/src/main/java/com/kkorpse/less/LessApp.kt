@@ -5,8 +5,21 @@ import android.content.Context
 import coil3.ImageLoader
 import coil3.SingletonImageLoader
 import coil3.video.VideoFrameDecoder
+import com.kkorpse.less.prefs.AppPreferences
+import com.kkorpse.less.prefs.BrowseStore
 
 class LessApp : Application(), SingletonImageLoader.Factory {
+
+    lateinit var preferences: AppPreferences
+        private set
+    lateinit var browseStore: BrowseStore
+        private set
+
+    override fun onCreate() {
+        super.onCreate()
+        preferences = AppPreferences(this)
+        browseStore = BrowseStore(this)
+    }
 
     override fun newImageLoader(context: Context): ImageLoader {
         return ImageLoader.Builder(context)

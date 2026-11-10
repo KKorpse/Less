@@ -28,6 +28,26 @@ class MediaRepository(private val context: Context) {
         }
     }
 
+    suspend fun loadPhotos(): Result<List<MediaItem>> = withContext(Dispatchers.IO) {
+        try {
+            Result.success(queryImages().sortedByDescending { it.dateMillis })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun loadVideos(): Result<List<MediaItem>> = withContext(Dispatchers.IO) {
+        try {
+            Result.success(queryVideos().sortedByDescending { it.dateMillis })
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     suspend fun loadPicked(uris: List<Uri>): Result<List<MediaItem>> = withContext(Dispatchers.IO) {
         try {
             Result.success(uris.mapNotNull { queryUri(it) })

@@ -3,9 +3,12 @@
     <color name="bg">#09090A</color>
     <color name="surface">#161618</color>
     <color name="surface_high">#232326</color>
+    <color name="card">#121214</color>
     <color name="text_primary">#F5F5F7</color>
     <color name="text_secondary">#9B9BA1</color>
     <color name="text_tertiary">#6C6C72</color>
     <color name="accent">#FFFFFF</color>
     <color name="black">#000000</color>
+    <color name="heart">#FF5C73</color>
+    <color name="danger">#FF5A5F</color>
 </resources>

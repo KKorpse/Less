@@ -7,6 +7,7 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
+import java.time.temporal.ChronoUnit
 import java.util.Locale
 import kotlin.math.roundToLong
 
@@ -34,6 +35,19 @@ object Format {
 
     fun fullDate(millis: Long): String =
         fullDateFormatter.format(Instant.ofEpochMilli(millis).atZone(zone))
+
+    fun relativeTime(millis: Long): String {
+        val date = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+        val today = LocalDate.now(zone)
+        val days = ChronoUnit.DAYS.between(date, today).coerceAtLeast(0)
+        return when {
+            days < 1 -> "今天"
+            days < 7 -> "$days 天前"
+            days < 30 -> "${days / 7} 周前"
+            days < 365 -> "${days / 30} 个月前"
+            else -> "${days / 365} 年前"
+        }
+    }
 
     fun count(value: Int): String = numberFormat.format(value)
 
