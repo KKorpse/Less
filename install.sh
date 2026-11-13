@@ -5,7 +5,7 @@ cd "$(dirname "$0")"
 
 SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-$HOME/Library/Android/sdk}}"
 ADB="$SDK/platform-tools/adb"
-APK="${1:-dist/Less-v2.2.2-debug.apk}"
+APK="${1:-dist/Less-v2.2.3-debug.apk}"
 
 if [[ ! -x "$ADB" ]]; then
   echo "找不到 adb：$ADB" >&2

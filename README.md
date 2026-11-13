@@ -4,7 +4,7 @@
 
 2.1 版本把照片、视频、统计收敛成**同一个首页的三个模式**：底部是悬浮胶囊导航，照片模式直接展示三张扑克牌，视频模式点一下就直接进入刷视频，不再额外打开新页面。
 
-2.2 版本继续打磨照片浏览：一组看完自动进入下一组；照片按原始比例装进圆角卡片，竖屏 2:3 时横向照片的上下空区会自动铺上照片整体色调；底部胶囊导航再压低 1/3，并给 tab 切换加了淡入淡出动效。2.2.1 继续收小圆角、放大图片可用区域，并让缩放时整张图（连同圆角）一起放大；2.2.2 把首页恢复成三张扑克牌展开的样式，并用单一路径重画卡片圆角与白边。
+2.2 版本继续打磨照片浏览：一组看完自动进入下一组；照片按原始比例装进圆角卡片，竖屏 2:3 时横向照片的上下空区会自动铺上照片整体色调；底部胶囊导航再压低 1/3，并给 tab 切换加了淡入淡出动效。2.2.1 继续收小圆角、放大图片可用区域，并让缩放时整张图（连同圆角）一起放大；2.2.2 把首页恢复成三张扑克牌展开的样式，并用单一路径重画卡片圆角与白边。2.2.3 把收藏写进系统媒体库的 `IS_FAVORITE`，让系统相册的收藏和 Less 里的收藏变成同一份数据。
 
 ## 功能
 
@@ -137,13 +137,14 @@ dist/Less-v2.1.1-debug.apk
 dist/Less-v2.2.0-debug.apk
 dist/Less-v2.2.1-debug.apk
 dist/Less-v2.2.2-debug.apk
+dist/Less-v2.2.3-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.2-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.3-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
