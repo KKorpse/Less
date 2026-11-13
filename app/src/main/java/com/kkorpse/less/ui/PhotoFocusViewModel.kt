@@ -15,7 +15,7 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
 
     private val app = application as LessApp
     private val groupBuilder = PhotoGroupBuilder(
-        MediaRepository(application),
+        MediaRepository(application, app.browseStore),
         app.preferences,
         app.browseStore
     )

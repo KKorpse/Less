@@ -16,6 +16,23 @@ class BrowseStore(context: Context) {
         (prefs.getStringSet(KEY_VIEWED_VIDEOS, emptySet()) ?: emptySet()).toMutableSet()
     private val favorites: MutableSet<String> =
         (prefs.getStringSet(KEY_FAVORITES, emptySet()) ?: emptySet()).toMutableSet()
+    /** 无法写入系统媒体库、只存在于 Less 的收藏，校准镜像时不能把它们删掉。 */
+    private val localOnlyFavorites: MutableSet<String> =
+        (prefs.getStringSet(KEY_LOCAL_ONLY_FAVORITES, emptySet()) ?: emptySet()).toMutableSet()
+
+    init {
+        // 2.2.3 之前的收藏只存在本地，升级后给它们打上“仅本地”标记，
+        // 免得第一次用 MediaStore 校准镜像时被清掉。
+        if (!prefs.getBoolean(KEY_FAVORITES_MIGRATED, false)) {
+            if (favorites.isNotEmpty()) {
+                localOnlyFavorites.addAll(favorites)
+            }
+            prefs.edit()
+                .putBoolean(KEY_FAVORITES_MIGRATED, true)
+                .putStringSet(KEY_LOCAL_ONLY_FAVORITES, localOnlyFavorites.toSet())
+                .apply()
+        }
+    }
 
     private var deletedPhotos: Int = prefs.getInt(KEY_DELETED_PHOTOS, 0)
     private var deletedVideos: Int = prefs.getInt(KEY_DELETED_VIDEOS, 0)
@@ -54,17 +71,57 @@ class BrowseStore(context: Context) {
 
     fun isFavorite(uri: Uri): Boolean = favorites.contains(uri.toString())
 
-    fun toggleFavorite(uri: Uri): Boolean {
+    /** 设置收藏状态；只在状态真的变化时写盘。 */
+    fun setFavorite(uri: Uri, favorite: Boolean) {
         val key = uri.toString()
-        val favorite = if (favorites.contains(key)) {
-            favorites.remove(key)
-            false
-        } else {
-            favorites.add(key)
-            true
+        val changed = if (favorite) favorites.add(key) else favorites.remove(key)
+        if (changed) {
+            prefs.edit().putStringSet(KEY_FAVORITES, favorites.toSet()).apply()
         }
-        prefs.edit().putStringSet(KEY_FAVORITES, favorites.toSet()).apply()
+        if (!favorite) markLocalOnly(uri, false)
+    }
+
+    /** 记录这条收藏没有写进系统媒体库，校准镜像时要保留。 */
+    fun markLocalOnly(uri: Uri, localOnly: Boolean) {
+        val key = uri.toString()
+        val changed = if (localOnly) localOnlyFavorites.add(key) else localOnlyFavorites.remove(key)
+        if (changed) {
+            prefs.edit()
+                .putStringSet(KEY_LOCAL_ONLY_FAVORITES, localOnlyFavorites.toSet())
+                .apply()
+        }
+    }
+
+    fun toggleFavorite(uri: Uri): Boolean {
+        val favorite = !isFavorite(uri)
+        setFavorite(uri, favorite)
         return favorite
+    }
+
+    /**
+     * 用 MediaStore 的 IS_FAVORITE 校准本地镜像：系统相册里的收藏/取消收藏
+     * 也要能在 Less 里看到。
+     */
+    fun syncFavorites(values: Map<String, Boolean>) {
+        if (values.isEmpty()) return
+        var favoritesChanged = false
+        var localOnlyChanged = false
+        values.forEach { (key, favorite) ->
+            if (favorite) {
+                // 系统里已收藏：本机镜像跟上，并清掉“仅本地”标记。
+                favoritesChanged = favorites.add(key) || favoritesChanged
+                if (localOnlyFavorites.remove(key)) localOnlyChanged = true
+            } else if (!localOnlyFavorites.contains(key)) {
+                // 系统里没有收藏：除非这条收藏压根没写进系统，否则本机也取消。
+                favoritesChanged = favorites.remove(key) || favoritesChanged
+            }
+        }
+        if (favoritesChanged || localOnlyChanged) {
+            prefs.edit()
+                .putStringSet(KEY_FAVORITES, favorites.toSet())
+                .putStringSet(KEY_LOCAL_ONLY_FAVORITES, localOnlyFavorites.toSet())
+                .apply()
+        }
     }
 
     fun favoriteUris(): Set<String> = favorites.toSet()
@@ -99,6 +156,8 @@ class BrowseStore(context: Context) {
         private const val KEY_VIEWED_PHOTOS = "viewed_photos"
         private const val KEY_VIEWED_VIDEOS = "viewed_videos"
         private const val KEY_FAVORITES = "favorites"
+        private const val KEY_LOCAL_ONLY_FAVORITES = "local_only_favorites"
+        private const val KEY_FAVORITES_MIGRATED = "favorites_migrated"
         private const val KEY_DELETED_PHOTOS = "deleted_photos"
         private const val KEY_DELETED_VIDEOS = "deleted_videos"
         private const val KEY_CURSOR = "sequential_cursor"

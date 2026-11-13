@@ -76,11 +76,13 @@
 
 ## 收藏与删除说明
 
-**收藏**保存在 Less 本地。ColorOS / Android 系统相册的「收藏」相册没有向第三方应用开放写入接口，第三方应用无法可靠地把照片直接塞进 OPPO 相册的收藏夹。本版：
+**收藏**会写进系统媒体库的 `IS_FAVORITE` 字段：
 
-- 收藏状态保存在本机
-- 首页右上角心形入口集中查看收藏
-- 若后续需要同步系统收藏，可以接入 `MediaStore.createFavoriteRequest`，但 Android 会为每次操作弹系统确认
+- Android 16（API 36）调用 `MediaStore.markIsFavoriteStatus` 直接写入，不再弹窗
+- Android 11–15 调用 `MediaStore.createFavoriteRequest`，系统会为每次操作弹一次确认
+- 读取媒体时用 MediaStore 的收藏状态校准本地镜像，所以系统相册里的收藏/取消收藏也会反映到 Less
+- 系统相册的「收藏」相册是否展示该字段由相册应用自己决定；ColorOS 若忽略 `IS_FAVORITE`，收藏仍可在首页右上角心形入口查看
+- 通过系统 Photo Picker 临时选中的内容不在媒体库里，只能收藏在 Less 本地
 
 **照片删除**分两步：
 
@@ -95,7 +97,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.2.2（versionCode 11） |
+| 当前版本 | 2.2.3（versionCode 12） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -118,7 +120,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.2.2-debug.apk
+app/build/outputs/apk/debug/Less-v2.2.3-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -228,7 +230,7 @@ app/src/main/java/com/kkorpse/less/
 
 ## 已知边界
 
-- 系统相册的「收藏」夹没有公开写入接口，收藏目前只在 Less 内生效。
+- 收藏通过 MediaStore `IS_FAVORITE` 写入，是否出现在系统相册「收藏」夹取决于相册应用是否读取该字段；Photo Picker 选中的内容只能收藏在 Less 内。
 - 拍摄地址需要照片自身带 GPS，并需要 `ACCESS_MEDIA_LOCATION`；没有 GPS 或系统无法反查时显示「未记录拍摄地点」或坐标。
 - 删除/撤回需要系统确认；确认框由 Android 媒体提供方绘制，可能是浅色样式。
 - 「已删除」统计的是本应用发起的删除次数；在系统相册里手动删除不会计入。

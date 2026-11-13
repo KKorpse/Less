@@ -25,7 +25,7 @@ data class VideoUndoEntry(
 class VideoFeedViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as LessApp
-    private val repository = MediaRepository(application)
+    private val repository = MediaRepository(application, app.browseStore)
 
     private val _state = MutableStateFlow(VideoFeedState())
     val state = _state.asStateFlow()

@@ -44,6 +44,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private lateinit var adapter: PhotoFocusAdapter
     private lateinit var layoutManager: LinearLayoutManager
     private lateinit var batchController: BatchTrashController
+    private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
     private val colorResolver = PhotoColorResolver()
 
@@ -103,6 +104,9 @@ class PhotoFocusActivity : AppCompatActivity() {
 
         batchController = BatchTrashController(this) { trash, success ->
             handleBatchResult(trash, success)
+        }
+        favoriteController = FavoriteController(this, this) { request, success ->
+            handleFavoriteResult(request, success)
         }
 
         observePages()
@@ -393,10 +397,24 @@ class PhotoFocusActivity : AppCompatActivity() {
     }
 
     private fun toggleFavorite(item: MediaItem) {
-        (application as LessApp).browseStore.toggleFavorite(item.uri)
+        val store = (application as LessApp).browseStore
+        val favorite = !store.isFavorite(item.uri)
+        // 先更新本地镜像和 UI，再尝试写入系统媒体库；系统写入失败时回滚。
+        store.setFavorite(item.uri, favorite)
         if (currentPhoto()?.uri == item.uri) {
             updateFavorite(item)
         }
+        if (!favoriteController.request(item, favorite)) {
+            store.markLocalOnly(item.uri, favorite)
+        }
+    }
+
+    private fun handleFavoriteResult(request: FavoriteController.Request, success: Boolean) {
+        if (success) return
+        val store = (application as LessApp).browseStore
+        request.items.forEach { store.setFavorite(it.uri, !request.favorite) }
+        currentPhoto()?.let { updateFavorite(it) }
+        Toast.makeText(this, R.string.favorite_sync_failed, Toast.LENGTH_SHORT).show()
     }
 
     private fun updateFavorite(item: MediaItem) {

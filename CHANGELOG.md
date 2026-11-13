@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.3 — 2026-11-14
+
+- 收藏改为写入系统媒体库：Android 16 通过 `MediaStore.markIsFavoriteStatus` 直接写 `IS_FAVORITE`，不弹窗；Android 11–15 通过 `MediaStore.createFavoriteRequest` 由系统弹一次确认。
+- 读取媒体时用 MediaStore 的收藏状态校准本地镜像，在系统相册里收藏/取消收藏的内容也会同步显示在 Less。
+- 系统拒绝写入时回滚收藏状态并提示，Photo Picker 选中的内容仍然只保存在 Less 本地。
+- 升级时把旧版本仅存本地的收藏标记为「仅本地」，避免第一次校准镜像时被清掉。
+
 ## 2.2.2 — 2026-11-10
 
 - 首页底部胶囊导航改回 44dp，三个按钮恢复原来的大小和连续排列。

@@ -12,5 +12,7 @@ data class MediaItem(
     val durationMs: Long,
     val width: Int,
     val height: Int,
-    val sizeBytes: Long
+    val sizeBytes: Long,
+    /** MediaStore 中的 IS_FAVORITE 值，只有 id != 0 的媒体才有意义。 */
+    val isFavorite: Boolean = false
 )

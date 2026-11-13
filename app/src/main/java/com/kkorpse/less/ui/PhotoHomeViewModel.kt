@@ -23,7 +23,7 @@ class PhotoHomeViewModel(application: Application) : AndroidViewModel(applicatio
 
     private val app = application as LessApp
     private val builder = PhotoGroupBuilder(
-        MediaRepository(application),
+        MediaRepository(application, app.browseStore),
         app.preferences,
         app.browseStore
     )

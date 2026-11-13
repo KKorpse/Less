@@ -83,7 +83,7 @@
     <string name="settings_mode_random">随机</string>
     <string name="settings_mode_sequential">顺序</string>
     <string name="settings_note_section">说明</string>
-    <string name="settings_favorites_note">收藏保存在 Less 本地，可以从首页右上角的心形入口查看。ColorOS 系统“收藏”相册没有向第三方应用开放写入接口。</string>
+    <string name="settings_favorites_note">收藏会写入系统媒体库（MediaStore 的 IS_FAVORITE），系统相册的“收藏”相册若读取该字段就会同步显示；Android 11–15 首次收藏时会弹一次系统确认。首页右上角的心形入口始终可以查看 Less 内的收藏。</string>
     <string name="settings_delete_note">照片上滑只会标记待删除；本组看完后在汇总页统一确认，再调用系统回收站。视频仍在右侧直接删除/撤回。</string>
     <string name="settings_location_note">照片气泡里的拍摄地址来自照片内置 GPS，首次进入照片浏览时会请求读取照片位置信息。没有 GPS 或无法解析时显示“未记录拍摄地点”或坐标。</string>
     <string name="settings_version">Less %1$s</string>
@@ -120,6 +120,7 @@
     <string name="trash_success">已移入系统回收站</string>
     <string name="restore_success">已从回收站恢复</string>
     <string name="favorite_added">已收藏</string>
+    <string name="favorite_sync_failed">系统相册没有接受这次收藏，已保存在 Less 内</string>
     <string name="favorite_removed">已取消收藏</string>
 
     <string name="viewer_back">返回</string>

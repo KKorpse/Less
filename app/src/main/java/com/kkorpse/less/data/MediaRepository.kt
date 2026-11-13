@@ -6,11 +6,15 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import com.kkorpse.less.prefs.BrowseStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-class MediaRepository(private val context: Context) {
+class MediaRepository(
+    private val context: Context,
+    private val favorites: BrowseStore? = null
+) {
 
     suspend fun loadLibrary(): Result<List<MediaItem>> = withContext(Dispatchers.IO) {
         try {
@@ -20,7 +24,7 @@ class MediaRepository(private val context: Context) {
                 compareByDescending<MediaItem> { it.dateMillis }
                     .thenByDescending { it.id }
             )
-            Result.success(items)
+            Result.success(syncFavorites(items))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -30,7 +34,7 @@ class MediaRepository(private val context: Context) {
 
     suspend fun loadPhotos(): Result<List<MediaItem>> = withContext(Dispatchers.IO) {
         try {
-            Result.success(queryImages().sortedByDescending { it.dateMillis })
+            Result.success(syncFavorites(queryImages().sortedByDescending { it.dateMillis }))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -40,7 +44,7 @@ class MediaRepository(private val context: Context) {
 
     suspend fun loadVideos(): Result<List<MediaItem>> = withContext(Dispatchers.IO) {
         try {
-            Result.success(queryVideos().sortedByDescending { it.dateMillis })
+            Result.success(syncFavorites(queryVideos().sortedByDescending { it.dateMillis }))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -68,7 +72,7 @@ class MediaRepository(private val context: Context) {
             MediaStore.MediaColumns.WIDTH,
             MediaStore.MediaColumns.HEIGHT,
             MediaStore.MediaColumns.SIZE
-        )
+        ) + favoriteProjection()
         return context.contentResolver.query(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             projection,
@@ -89,7 +93,7 @@ class MediaRepository(private val context: Context) {
             MediaStore.MediaColumns.HEIGHT,
             MediaStore.MediaColumns.SIZE,
             MediaStore.MediaColumns.DURATION
-        )
+        ) + favoriteProjection()
         return context.contentResolver.query(
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
             projection,
@@ -125,6 +129,11 @@ class MediaRepository(private val context: Context) {
         } else {
             -1
         }
+        val favoriteColumn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            cursor.getColumnIndex(MediaStore.MediaColumns.IS_FAVORITE)
+        } else {
+            -1
+        }
 
         val result = ArrayList<MediaItem>(cursor.count)
         while (cursor.moveToNext()) {
@@ -148,10 +157,32 @@ class MediaRepository(private val context: Context) {
                 durationMs = if (durationColumn >= 0) cursor.getLong(durationColumn) else 0L,
                 width = cursor.getInt(widthColumn),
                 height = cursor.getInt(heightColumn),
-                sizeBytes = cursor.getLong(sizeColumn)
+                sizeBytes = cursor.getLong(sizeColumn),
+                isFavorite = favoriteColumn >= 0 &&
+                    cursor.getInt(favoriteColumn) == 1
             )
         }
         return result
+    }
+
+    private fun favoriteProjection(): Array<String> =
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            arrayOf(MediaStore.MediaColumns.IS_FAVORITE)
+        } else {
+            emptyArray()
+        }
+
+    /**
+     * 系统相册的收藏状态是准的，本地集合只是镜像：每次读取媒体时用它校准，
+     * 这样在系统相册里收藏/取消收藏的内容也能同步到 Less。
+     */
+    private fun syncFavorites(items: List<MediaItem>): List<MediaItem> {
+        val store = favorites ?: return items
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return items
+        val flags = items.filter { it.id != 0L }
+            .associate { it.uri.toString() to it.isFavorite }
+        store.syncFavorites(flags)
+        return items
     }
 
     private fun queryUri(uri: Uri): MediaItem? {

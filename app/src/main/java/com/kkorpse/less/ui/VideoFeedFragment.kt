@@ -44,6 +44,7 @@ class VideoFeedFragment : Fragment() {
     private lateinit var adapter: VideoFeedAdapter
     private lateinit var player: ExoPlayer
     private lateinit var trashController: TrashController
+    private lateinit var favoriteController: FavoriteController
 
     private var attachedPosition = RecyclerView.NO_POSITION
     private var initialApplied = false
@@ -62,6 +63,9 @@ class VideoFeedFragment : Fragment() {
         super.onCreate(savedInstanceState)
         trashController = TrashController(this, requireContext()) { request, success ->
             handleTrashResult(request, success)
+        }
+        favoriteController = FavoriteController(this, requireContext()) { request, success ->
+            handleFavoriteResult(request, success)
         }
     }
 
@@ -313,8 +317,22 @@ class VideoFeedFragment : Fragment() {
     }
 
     private fun toggleFavorite(item: MediaItem) {
-        (requireActivity().application as LessApp).browseStore.toggleFavorite(item.uri)
+        val store = (requireActivity().application as LessApp).browseStore
+        val favorite = !store.isFavorite(item.uri)
+        // 先更新本地镜像和 UI，再尝试写入系统媒体库；系统写入失败时回滚。
+        store.setFavorite(item.uri, favorite)
         updateFavorite(item)
+        if (!favoriteController.request(item, favorite)) {
+            store.markLocalOnly(item.uri, favorite)
+        }
+    }
+
+    private fun handleFavoriteResult(request: FavoriteController.Request, success: Boolean) {
+        if (success || _binding == null) return
+        val store = (requireActivity().application as LessApp).browseStore
+        request.items.forEach { store.setFavorite(it.uri, !request.favorite) }
+        currentItem()?.let { updateFavorite(it) }
+        Toast.makeText(requireContext(), R.string.favorite_sync_failed, Toast.LENGTH_SHORT).show()
     }
 
     private fun deleteCurrent() {
