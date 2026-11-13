@@ -156,6 +156,38 @@ dist/SHA256SUMS.txt
 
 如果是在平板上用文件管理器直接打开 APK，需要在 ColorOS 中允许「安装外部来源应用」。
 
+### 签名与覆盖安装
+
+`dist/` 里的 APK 由构建机的 debug keystore（`~/.android/debug.keystore`）签名，仓库里不保存私钥。Android 只允许**签名相同**的 APK 覆盖安装，所以：
+
+- 在另一台机器上打包前，先把同一个 `~/.android/debug.keystore` 放回 `~/.android/`，否则会提示「签名冲突」；
+- 万一已经在平板上装了别的签名版本，只能卸载后重装，应用内的收藏、浏览记录和设置会丢失（收藏在 2.2.3 起也写进了系统媒体库，但仍以应用数据为准）。
+
+卸载前可以先备份、装回后再恢复应用数据（debug 包支持 `run-as`）：
+
+```bash
+PKG=com.kkorpse.less
+adb shell "run-as $PKG ls shared_prefs"
+adb exec-out run-as $PKG cat shared_prefs/less_browse.xml > less_browse.xml
+adb exec-out run-as $PKG cat shared_prefs/less_settings.xml > less_settings.xml
+
+adb uninstall $PKG
+adb install -r dist/Less-v2.2.3-debug.apk
+
+adb shell am force-stop $PKG
+adb shell run-as $PKG mkdir -p shared_prefs
+adb shell run-as $PKG sh -c 'cat > shared_prefs/less_browse.xml' < less_browse.xml
+adb shell run-as $PKG sh -c 'cat > shared_prefs/less_settings.xml' < less_settings.xml
+adb shell am start -n com.kkorpse.less/.ui.MainActivity
+```
+
+确认两边的签名是否一致：
+
+```bash
+apksigner verify --print-certs dist/Less-v2.2.3-debug.apk
+keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep SHA256
+```
+
 ## 权限一览
 
 | 权限 | 用途 |
