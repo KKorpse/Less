@@ -4,7 +4,7 @@
 
 2.1 版本把照片、视频、统计收敛成**同一个首页的三个模式**：底部是悬浮胶囊导航，照片模式直接展示三张扑克牌，视频模式点一下就直接进入刷视频，不再额外打开新页面。
 
-2.2 版本继续打磨照片浏览：一组看完自动进入下一组；照片按原始比例装进圆角卡片，竖屏 2:3 时横向照片的上下空区会自动铺上照片整体色调；底部胶囊导航再压低 1/3，并给 tab 切换加了淡入淡出动效。2.2.1 继续收小圆角、放大图片可用区域，并让缩放时整张图（连同圆角）一起放大；2.2.2 把首页恢复成三张扑克牌展开的样式，并用单一路径重画卡片圆角与白边。2.2.3 把收藏写进系统媒体库的 `IS_FAVORITE`，让系统相册的收藏和 Less 里的收藏变成同一份数据。
+2.2 版本继续打磨照片浏览：一组看完自动进入下一组；照片按原始比例装进圆角卡片，竖屏 2:3 时横向照片的上下空区会自动铺上照片整体色调；底部胶囊导航再压低 1/3，并给 tab 切换加了淡入淡出动效。2.2.1 继续收小圆角、放大图片可用区域，并让缩放时整张图（连同圆角）一起放大；2.2.2 把首页恢复成三张扑克牌展开的样式，并用单一路径重画卡片圆角与白边。2.2.3 把收藏写进系统媒体库的 `IS_FAVORITE`，让系统相册的收藏和 Less 里的收藏变成同一份数据。2.2.4 把签名固化进仓库，任何机器构建出的 APK 都能直接覆盖安装。
 
 ## 功能
 
@@ -97,7 +97,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.2.3（versionCode 12） |
+| 当前版本 | 2.2.4（versionCode 13） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -120,7 +120,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.2.3-debug.apk
+app/build/outputs/apk/debug/Less-v2.2.4-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -138,13 +138,14 @@ dist/Less-v2.2.0-debug.apk
 dist/Less-v2.2.1-debug.apk
 dist/Less-v2.2.2-debug.apk
 dist/Less-v2.2.3-debug.apk
+dist/Less-v2.2.4-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.3-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.4-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -158,12 +159,20 @@ dist/SHA256SUMS.txt
 
 ### 签名与覆盖安装
 
-`dist/` 里的 APK 由构建机的 debug keystore（`~/.android/debug.keystore`）签名，仓库里不保存私钥。Android 只允许**签名相同**的 APK 覆盖安装，所以：
+项目使用**仓库内固化的统一签名**：`keystore/less-release.jks` + `keystore.properties`，debug 和 release 两个构建类型都用它签名。所以在任何机器上 `./gradlew assembleDebug` 出来的 APK 签名都一致，可以直接覆盖安装。
 
-- 在另一台机器上打包前，先把同一个 `~/.android/debug.keystore` 放回 `~/.android/`，否则会提示「签名冲突」；
-- 万一已经在平板上装了别的签名版本，只能卸载后重装，应用内的收藏、浏览记录和设置会丢失（收藏在 2.2.3 起也写进了系统媒体库，但仍以应用数据为准）。
+- 证书：`CN=Less, O=KKorpse`，SHA-256 `89:DC:71:DE:…:55:61`，有效期 2026–2056
+- 验证签名：
 
-卸载前可以先备份、装回后再恢复应用数据（debug 包支持 `run-as`）：
+  ```bash
+  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.2.4-debug.apk
+  ```
+
+- **一次性切换**：2.2.3 及更早的 `dist/` 包是原作者机器的 debug keystore 签的，与统一签名不一致，第一次装 2.2.4 必须先卸载旧包（卸载前可按下面的命令备份应用数据）。
+- 从 2.2.4 起，只要用的是仓库里的签名配置，后续版本都能直接 `adb install -r` 覆盖更新。
+- 该 keystore 与其口令随仓库公开，只适合个人本地分发的工具类应用；如果要上架应用商店或涉及支付，应换成私有的 release keystore（换 key 同样需要卸载重装一次）。
+
+卸载前备份、装回后恢复应用数据（debug 包支持 `run-as`）：
 
 ```bash
 PKG=com.kkorpse.less
@@ -172,20 +181,13 @@ adb exec-out run-as $PKG cat shared_prefs/less_browse.xml > less_browse.xml
 adb exec-out run-as $PKG cat shared_prefs/less_settings.xml > less_settings.xml
 
 adb uninstall $PKG
-adb install -r dist/Less-v2.2.3-debug.apk
+adb install -r dist/Less-v2.2.4-debug.apk
 
 adb shell am force-stop $PKG
 adb shell run-as $PKG mkdir -p shared_prefs
 adb shell run-as $PKG sh -c 'cat > shared_prefs/less_browse.xml' < less_browse.xml
 adb shell run-as $PKG sh -c 'cat > shared_prefs/less_settings.xml' < less_settings.xml
 adb shell am start -n com.kkorpse.less/.ui.MainActivity
-```
-
-确认两边的签名是否一致：
-
-```bash
-apksigner verify --print-certs dist/Less-v2.2.3-debug.apk
-keytool -list -v -keystore ~/.android/debug.keystore -storepass android -alias androiddebugkey | grep SHA256
 ```
 
 ## 权限一览

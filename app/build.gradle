@@ -3,6 +3,14 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// 统一签名：keystore.properties 与 keystore/less-release.jks 一起提交在仓库里，
+// 保证任何机器构建出的 APK 签名一致，可以互相覆盖安装。
+def keystoreProps = new Properties()
+def keystorePropsFile = rootProject.file('keystore.properties')
+if (keystorePropsFile.exists()) {
+    keystorePropsFile.withInputStream { keystoreProps.load(it) }
+}
+
 android {
     namespace 'com.kkorpse.less'
     compileSdk 36
@@ -11,14 +19,28 @@ android {
         applicationId "com.kkorpse.less"
         minSdk 29
         targetSdk 36
-        versionCode 12
-        versionName "2.2.3"
+        versionCode 13
+        versionName "2.2.4"
 
         vectorDrawables.useSupportLibrary = true
     }
 
+    signingConfigs {
+        less {
+            storeFile rootProject.file(keystoreProps.getProperty('storeFile', 'keystore/less-release.jks'))
+            storePassword keystoreProps.getProperty('storePassword')
+            keyAlias keystoreProps.getProperty('keyAlias')
+            keyPassword keystoreProps.getProperty('keyPassword')
+        }
+    }
+
     buildTypes {
+        debug {
+            // debug 包也用项目签名，避免每台机器的 ~/.android/debug.keystore 不一致
+            signingConfig signingConfigs.less
+        }
         release {
+            signingConfig signingConfigs.less
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

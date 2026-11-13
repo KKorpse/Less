@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.4 — 2026-11-14
+
+- 统一签名：新增 `keystore/less-release.jks` 与 `keystore.properties` 并随仓库提交，debug / release 两个构建类型都用这把 key 签名，任何机器构建出的 APK 都能互相覆盖安装。
+- 版本号 2.2.4 / versionCode 13。从旧签名（原作者机器的 debug keystore）切换到本签名需要卸载重装一次，之后即可正常覆盖更新。
+
 ## 2.2.3 — 2026-11-14
 
 - 收藏改为写入系统媒体库：Android 16 通过 `MediaStore.markIsFavoriteStatus` 直接写 `IS_FAVORITE`，不弹窗；Android 11–15 通过 `MediaStore.createFavoriteRequest` 由系统弹一次确认。
