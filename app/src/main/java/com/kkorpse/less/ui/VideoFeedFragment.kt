@@ -10,7 +10,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.Toast
-import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -64,9 +63,9 @@ class VideoFeedFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        batchController = BatchTrashController(
-            requireActivity() as AppCompatActivity
-        ) { trash, success ->
+        // 必须挂在 Fragment 上：VideoFeedFragment 是在 MainActivity.onResume 里才被 add 的，
+        // 这时 Activity 已经 RESUMED，往 Activity 注册 launcher 会直接抛异常闪退。
+        batchController = BatchTrashController(this, requireContext()) { trash, success ->
             handleBatchResult(trash, success)
         }
         favoriteController = FavoriteController(this, requireContext()) { request, success ->

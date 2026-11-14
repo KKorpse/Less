@@ -110,7 +110,7 @@ class PhotoFocusActivity : AppCompatActivity() {
         setupActions()
         setupSwipe()
 
-        batchController = BatchTrashController(this) { trash, success ->
+        batchController = BatchTrashController(this, this) { trash, success ->
             handleBatchResult(trash, success)
         }
         favoriteController = FavoriteController(this, this) { request, success ->
