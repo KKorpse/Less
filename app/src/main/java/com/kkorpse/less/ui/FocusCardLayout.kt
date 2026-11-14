@@ -65,7 +65,11 @@ class FocusCardLayout @JvmOverloads constructor(
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
         when (ev.actionMasked) {
-            MotionEvent.ACTION_POINTER_DOWN -> pinching = true
+            MotionEvent.ACTION_POINTER_DOWN -> {
+                pinching = true
+                // 抢在 RecyclerView 判断滑动之前锁住手势，双指一落下就交给 PhotoView。
+                parent?.requestDisallowInterceptTouchEvent(true)
+            }
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> pinching = false
             else -> Unit
         }

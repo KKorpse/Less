@@ -1,6 +1,7 @@
 package com.kkorpse.less.ui
 
 import android.content.res.ColorStateList
+import android.net.Uri
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -9,6 +10,7 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
@@ -43,13 +45,14 @@ class VideoFeedFragment : Fragment() {
 
     private lateinit var adapter: VideoFeedAdapter
     private lateinit var player: ExoPlayer
-    private lateinit var trashController: TrashController
+    private lateinit var batchController: BatchTrashController
     private lateinit var favoriteController: FavoriteController
 
     private var attachedPosition = RecyclerView.NO_POSITION
+    private var attachedUri: Uri? = null
     private var initialApplied = false
     private var retryCount = 0
-    private var pendingPlayIndex: Int? = null
+    private var pendingPlayPosition: Int? = null
 
     private val handler = Handler(Looper.getMainLooper())
     private val progressRunnable = object : Runnable {
@@ -61,8 +64,10 @@ class VideoFeedFragment : Fragment() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        trashController = TrashController(this, requireContext()) { request, success ->
-            handleTrashResult(request, success)
+        batchController = BatchTrashController(
+            requireActivity() as AppCompatActivity
+        ) { trash, success ->
+            handleBatchResult(trash, success)
         }
         favoriteController = FavoriteController(this, requireContext()) { request, success ->
             handleFavoriteResult(request, success)
@@ -99,7 +104,7 @@ class VideoFeedFragment : Fragment() {
 
                 override fun onPlayerError(error: PlaybackException) {
                     if (_binding == null) return
-                    adapter.showError(viewModel.currentIndex, true)
+                    adapter.showError(binding.pager.currentItem, true)
                     updatePlayIndicator()
                     Toast.makeText(
                         requireContext(),
@@ -110,7 +115,14 @@ class VideoFeedFragment : Fragment() {
             })
         }
 
-        adapter = VideoFeedAdapter()
+        adapter = VideoFeedAdapter(
+            onBatchDelete = ::requestBatchDelete,
+            onUndoBatch = ::requestBatchUndo,
+            onNextGroup = ::nextGroup,
+            onReview = {
+                binding.pager.setCurrentItem(0, false)
+            }
+        )
         binding.pager.orientation = ViewPager2.ORIENTATION_VERTICAL
         binding.pager.offscreenPageLimit = 1
         binding.pager.adapter = adapter
@@ -150,7 +162,10 @@ class VideoFeedFragment : Fragment() {
 
     override fun onDestroyView() {
         handler.removeCallbacks(progressRunnable)
-        if (::player.isInitialized) player.release()
+        if (::player.isInitialized) {
+            detachPlayer()
+            player.release()
+        }
         _binding = null
         super.onDestroyView()
     }
@@ -167,10 +182,11 @@ class VideoFeedFragment : Fragment() {
     }
 
     private fun resumePlayback() {
-        if (viewModel.state.value.videos.isEmpty()) return
-        val position = viewModel.currentIndex
+        val pages = viewModel.state.value.pages
+        if (pages.none { it is VideoPage.Video }) return
+        val position = currentVideoPosition() ?: return
         updateOverlay(position)
-        if (player.mediaItemCount == 0 || attachedPosition != position) {
+        if (attachedUri == null || attachedPosition != position) {
             binding.pager.post {
                 retryCount = 0
                 playAt(position)
@@ -200,21 +216,26 @@ class VideoFeedFragment : Fragment() {
         binding.favoriteAction.setOnClickListener {
             currentItem()?.let { toggleFavorite(it) }
         }
-        binding.deleteAction.setOnClickListener { deleteCurrent() }
-        binding.undoAction.setOnClickListener { undoLast() }
-        binding.emptyUndo.setOnClickListener { undoLast() }
+        binding.deleteAction.setOnClickListener { markCurrentForDelete() }
+        binding.undoAction.setOnClickListener { undoLastMark() }
+        binding.emptyUndo.setOnClickListener { undoLastMark() }
 
         binding.pager.registerOnPageChangeCallback(object : ViewPager2.OnPageChangeCallback() {
             override fun onPageSelected(position: Int) {
                 if (_binding == null) return
                 viewModel.setCurrentIndex(position)
-                player.pause()
-                if (attachedPosition != RecyclerView.NO_POSITION) {
-                    adapter.attachPlayer(attachedPosition, null)
+                val page = viewModel.state.value.pages.getOrNull(position)
+                if (page is VideoPage.Video) {
+                    binding.videoActions.isVisible = true
+                    player.pause()
+                    retryCount = 0
+                    playAt(position)
+                    updateOverlay(position)
+                } else {
+                    binding.videoActions.isVisible = false
+                    stopPlayback()
+                    updateSummaryChrome()
                 }
-                retryCount = 0
-                playAt(position)
-                updateOverlay(position)
             }
         })
     }
@@ -224,26 +245,30 @@ class VideoFeedFragment : Fragment() {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.state.collect { state ->
                     if (_binding == null) return@collect
-                    binding.loading.isVisible = state.loading && state.videos.isEmpty()
-                    val empty = !state.loading && state.videos.isEmpty()
-                    binding.emptyPanel.isVisible = empty
-                    binding.videoActions.isVisible = state.videos.isNotEmpty()
-                    binding.videoTime.isVisible = state.videos.isNotEmpty()
+                    binding.loading.isVisible = state.loading && state.pages.isEmpty()
 
-                    adapter.submitList(state.videos) {
+                    val hasVideo = state.pages.any { it is VideoPage.Video }
+                    val summary = state.pages.filterIsInstance<VideoPage.Summary>().firstOrNull()
+                    val hasMarks = summary != null &&
+                        (summary.pending.isNotEmpty() || summary.deleted.isNotEmpty())
+                    // 组里视频全被标记删除时也要能进汇总页，不能当成空列表。
+                    val empty = !state.loading && !hasVideo && !hasMarks
+                    binding.emptyPanel.isVisible = empty
+                    binding.videoActions.isVisible = hasVideo
+                    binding.videoTime.isVisible = hasVideo
+
+                    adapter.submitList(state.pages) {
                         if (_binding == null) return@submitList
-                        if (state.videos.isEmpty()) {
-                            resetAttachment()
-                            player.stop()
-                            player.clearMediaItems()
-                            updateOverlay(0)
+                        if (empty) {
+                            stopPlayback()
                             return@submitList
                         }
 
-                        pendingPlayIndex?.let { requested ->
-                            pendingPlayIndex = null
-                            resetAttachment()
-                            val target = requested.coerceIn(state.videos.indices)
+                        val requested = pendingPlayPosition
+                        pendingPlayPosition = null
+
+                        if (requested != null) {
+                            val target = requested.coerceIn(state.pages.indices)
                             binding.pager.setCurrentItem(target, false)
                             binding.pager.post {
                                 retryCount = 0
@@ -255,20 +280,24 @@ class VideoFeedFragment : Fragment() {
 
                         if (!initialApplied) {
                             initialApplied = true
-                            val index = viewModel.currentIndex.coerceIn(state.videos.indices)
+                            val index = viewModel.currentIndex.coerceIn(state.pages.indices)
                             binding.pager.setCurrentItem(index, false)
                             updateOverlay(index)
                             binding.pager.post {
                                 retryCount = 0
                                 playAt(index)
                             }
-                        } else {
-                            val current = binding.pager.currentItem
-                            if (current !in state.videos.indices) {
-                                val next = (state.videos.size - 1).coerceAtLeast(0)
-                                binding.pager.setCurrentItem(next, false)
+                            return@submitList
+                        }
+
+                        val current = binding.pager.currentItem
+                        val page = state.pages.getOrNull(current)
+                        when (page) {
+                            is VideoPage.Video -> playAt(current)
+                            else -> {
+                                stopPlayback()
+                                updateSummaryChrome()
                             }
-                            updateOverlay(binding.pager.currentItem)
                         }
                     }
                 }
@@ -276,25 +305,47 @@ class VideoFeedFragment : Fragment() {
         }
     }
 
+    /** 组尾汇总页：隐藏播放相关的浮层，显示汇总内容。 */
+    private fun updateSummaryChrome() {
+        binding.videoActions.isVisible = false
+        binding.videoTime.isVisible = false
+        binding.playIndicator.isVisible = false
+        binding.videoProgress.progress = 0
+        binding.emptyUndo.isVisible = false
+    }
+
+    private fun currentPage(): VideoPage? =
+        viewModel.state.value.pages.getOrNull(binding.pager.currentItem)
+
+    private fun currentItem(): MediaItem? = (currentPage() as? VideoPage.Video)?.item
+
+    private fun currentVideoPosition(): Int? {
+        val page = currentPage()
+        return if (page is VideoPage.Video) binding.pager.currentItem else null
+    }
+
     private fun playAt(position: Int) {
         if (_binding == null) return
-        val videos = viewModel.state.value.videos
-        val item = videos.getOrNull(position) ?: return
+        val page = viewModel.state.value.pages.getOrNull(position) as? VideoPage.Video
+        if (page == null) {
+            stopPlayback()
+            return
+        }
+        val item = page.item
 
-        if (attachedPosition == position && player.mediaItemCount > 0) {
+        if (attachedUri == item.uri && player.mediaItemCount > 0) {
+            // 同一个视频换了位置：重新绑定画面，不重新 prepare，避免只有声音没有画面。
+            adapter.attachPlayer(position, player)
+            attachedPosition = position
             player.play()
             updateOverlay(position)
             updatePlayIndicator()
             return
         }
 
-        if (attachedPosition != RecyclerView.NO_POSITION && attachedPosition != position) {
-            adapter.attachPlayer(attachedPosition, null)
-        }
-
         if (adapter.playerViewAt(position) == null) {
             updateOverlay(position)
-            if (retryCount++ < 8) {
+            if (retryCount++ < 12) {
                 binding.pager.postDelayed({
                     if (_binding != null && binding.pager.currentItem == position) playAt(position)
                 }, 80L)
@@ -302,18 +353,99 @@ class VideoFeedFragment : Fragment() {
             return
         }
 
+        detachPlayer()
         adapter.attachPlayer(position, player)
         player.setMediaItem(androidx.media3.common.MediaItem.fromUri(item.uri))
         player.prepare()
         player.playWhenReady = true
         player.play()
         attachedPosition = position
+        attachedUri = item.uri
         adapter.showError(position, false)
 
         viewModel.setCurrentIndex(position)
         (requireActivity().application as LessApp).browseStore.markViewed(item.uri, true)
         updateOverlay(position)
         updatePlayIndicator()
+    }
+
+    private fun detachPlayer() {
+        if (attachedPosition != RecyclerView.NO_POSITION) {
+            adapter.attachPlayer(attachedPosition, null)
+        }
+        attachedPosition = RecyclerView.NO_POSITION
+        attachedUri = null
+        if (::player.isInitialized && player.mediaItemCount > 0) {
+            player.stop()
+            player.clearMediaItems()
+        }
+    }
+
+    private fun stopPlayback() {
+        detachPlayer()
+        if (_binding == null) return
+        binding.playIndicator.isVisible = false
+        binding.videoProgress.progress = 0
+    }
+
+    private fun markCurrentForDelete() {
+        val position = binding.pager.currentItem
+        val item = currentItem() ?: return
+        player.pause()
+        pendingPlayPosition = position
+        if (!viewModel.markForDeletion(item)) {
+            pendingPlayPosition = null
+            return
+        }
+        binding.pager.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+    }
+
+    private fun undoLastMark() {
+        val item = viewModel.undoLastMark() ?: return
+        pendingPlayPosition = viewModel.state.value.pages
+            .indexOfFirst { it is VideoPage.Video && it.item.uri == item.uri }
+            .takeIf { it >= 0 }
+    }
+
+    private fun requestBatchDelete() {
+        val pending = viewModel.pendingItems()
+        if (pending.isEmpty() || batchController.isBusy) return
+        player.pause()
+        stopPlayback()
+        viewModel.setBatchBusy(true)
+        batchController.request(pending, trash = true)
+        updateSummaryChrome()
+    }
+
+    private fun requestBatchUndo() {
+        val deleted = viewModel.deletedItems()
+        if (deleted.isEmpty() || batchController.isBusy) return
+        viewModel.setBatchBusy(true)
+        batchController.request(deleted, trash = false)
+    }
+
+    private fun handleBatchResult(trash: Boolean, success: Boolean) {
+        if (_binding == null) return
+        if (!success) {
+            viewModel.setBatchBusy(false)
+            return
+        }
+        if (trash) {
+            viewModel.markBatchDeleted()
+            Toast.makeText(requireContext(), R.string.trash_success, Toast.LENGTH_SHORT).show()
+        } else {
+            viewModel.undoBatchDeleted()
+            Toast.makeText(requireContext(), R.string.restore_success, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    private fun nextGroup() {
+        if (viewModel.hasNextGroup()) {
+            viewModel.nextGroup()
+            binding.pager.post { binding.pager.setCurrentItem(0, false) }
+        } else {
+            requireActivity().finish()
+        }
     }
 
     private fun toggleFavorite(item: MediaItem) {
@@ -335,58 +467,12 @@ class VideoFeedFragment : Fragment() {
         Toast.makeText(requireContext(), R.string.favorite_sync_failed, Toast.LENGTH_SHORT).show()
     }
 
-    private fun deleteCurrent() {
-        val index = binding.pager.currentItem
-        val item = currentItem() ?: return
-        if (trashController.isBusy == true) return
-        player.pause()
-        trashController.request(item, trash = true, index = index)
-        refreshActions()
-    }
-
-    private fun undoLast() {
-        val entry = viewModel.peekUndo() ?: return
-        if (trashController.isBusy == true) return
-        player.pause()
-        trashController.request(entry.item, trash = false, index = entry.index)
-        refreshActions()
-    }
-
-    private fun handleTrashResult(request: TrashController.Request, success: Boolean) {
-        if (_binding == null) return
-        if (request.trash) {
-            if (success) {
-                pendingPlayIndex = request.index
-                viewModel.confirmTrash(request.item, request.index)
-                Toast.makeText(requireContext(), R.string.trash_success, Toast.LENGTH_SHORT).show()
-            } else {
-                playAt(viewModel.currentIndex)
-            }
-        } else {
-            if (success) {
-                pendingPlayIndex = request.index
-                viewModel.confirmRestore(request.item, request.index)
-                Toast.makeText(requireContext(), R.string.restore_success, Toast.LENGTH_SHORT).show()
-            } else {
-                Toast.makeText(requireContext(), R.string.restore_failed, Toast.LENGTH_SHORT).show()
-                playAt(viewModel.currentIndex)
-            }
-        }
-        refreshActions()
-    }
-
-    private fun currentItem(): MediaItem? =
-        viewModel.state.value.videos.getOrNull(binding.pager.currentItem)
-
     private fun updateOverlay(position: Int) {
         if (_binding == null) return
-        val videos = viewModel.state.value.videos
-        val item = videos.getOrNull(position)
+        val page = viewModel.state.value.pages.getOrNull(position)
+        val item = (page as? VideoPage.Video)?.item
         if (item == null) {
-            binding.videoTime.isVisible = false
-            binding.playIndicator.isVisible = false
-            binding.videoProgress.progress = 0
-            binding.emptyUndo.isVisible = viewModel.canUndo.value
+            updateSummaryChrome()
             return
         }
 
@@ -419,19 +505,22 @@ class VideoFeedFragment : Fragment() {
     }
 
     private fun refreshActions() {
-        val hasVideo = viewModel.state.value.videos.isNotEmpty()
-        val busy = trashController.isBusy == true
-        val canUndo = viewModel.canUndo.value && !busy
+        val hasVideo = currentPage() is VideoPage.Video
+        val busy = batchController.isBusy
         binding.deleteAction.isEnabled = hasVideo && !busy
         binding.deleteAction.alpha = if (binding.deleteAction.isEnabled) 1f else 0.4f
+        val canUndo = viewModel.state.value.pages.any {
+            it is VideoPage.Summary && it.pending.isNotEmpty()
+        } && !busy
         binding.undoAction.isEnabled = canUndo
         binding.undoAction.alpha = if (canUndo) 1f else 0.4f
-        binding.emptyUndo.isVisible = !hasVideo && viewModel.canUndo.value
+        binding.emptyUndo.isVisible = false
     }
 
     private fun updatePlayIndicator() {
         if (_binding == null || !::player.isInitialized) return
-        if (viewModel.state.value.videos.isEmpty()) {
+        val page = currentPage()
+        if (page !is VideoPage.Video) {
             binding.playIndicator.isVisible = false
             return
         }
@@ -441,18 +530,8 @@ class VideoFeedFragment : Fragment() {
     private fun updateProgress() {
         if (_binding == null || !::player.isInitialized) return
         val duration = player.duration
-        if (duration > 0L) {
-            binding.videoProgress.progress =
-                ((player.currentPosition * 1000L) / duration).toInt().coerceIn(0, 1000)
-        } else {
-            binding.videoProgress.progress = 0
-        }
-    }
-
-    private fun resetAttachment() {
-        if (attachedPosition != RecyclerView.NO_POSITION) {
-            adapter.attachPlayer(attachedPosition, null)
-            attachedPosition = RecyclerView.NO_POSITION
-        }
+        if (duration <= 0L) return
+        val progress = (player.currentPosition * 1000 / duration).coerceIn(0L, 1000L)
+        binding.videoProgress.progress = progress.toInt()
     }
 }

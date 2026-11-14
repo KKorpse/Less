@@ -44,6 +44,14 @@ class SettingsActivity : AppCompatActivity() {
             updateGroupSizeLabel(size)
         }
 
+        binding.videoGroupSizeSlider.value = preferences.videoGroupSize.toFloat().coerceIn(3f, 30f)
+        updateVideoGroupSizeLabel(preferences.videoGroupSize)
+        binding.videoGroupSizeSlider.addOnChangeListener { _, value, _ ->
+            val size = value.roundToInt().coerceIn(3, 30)
+            preferences.videoGroupSize = size
+            updateVideoGroupSizeLabel(size)
+        }
+
         if (preferences.doubleTapAction == DoubleTapAction.FAVORITE) {
             binding.doubleTapGroup.check(R.id.doubleTapFavorite)
         } else {
@@ -89,5 +97,9 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun updateGroupSizeLabel(size: Int) {
         binding.groupSizeValue.text = getString(R.string.settings_group_size_value, size)
+    }
+
+    private fun updateVideoGroupSizeLabel(size: Int) {
+        binding.videoGroupSizeValue.text = getString(R.string.settings_group_size_value, size)
     }
 }

@@ -23,6 +23,16 @@ class AppPreferences(context: Context) {
                 .apply()
         }
 
+    /** 视频每组数量，和照片的每组数量分开设置。 */
+    var videoGroupSize: Int
+        get() = prefs.getInt(KEY_VIDEO_GROUP_SIZE, DEFAULT_VIDEO_GROUP_SIZE)
+            .coerceIn(MIN_GROUP_SIZE, MAX_GROUP_SIZE)
+        set(value) {
+            prefs.edit()
+                .putInt(KEY_VIDEO_GROUP_SIZE, value.coerceIn(MIN_GROUP_SIZE, MAX_GROUP_SIZE))
+                .apply()
+        }
+
     var doubleTapAction: DoubleTapAction
         get() = runCatching {
             DoubleTapAction.valueOf(
@@ -79,11 +89,13 @@ class AppPreferences(context: Context) {
         const val MIN_GROUP_SIZE = 3
         const val MAX_GROUP_SIZE = 30
         const val DEFAULT_GROUP_SIZE = 10
+        const val DEFAULT_VIDEO_GROUP_SIZE = 10
 
         private const val KEY_GROUP_SIZE = "group_size"
         private const val KEY_DOUBLE_TAP = "double_tap"
         private const val KEY_BROWSE_MODE = "browse_mode"
         private const val KEY_LOCATION_ASKED = "location_asked"
+        private const val KEY_VIDEO_GROUP_SIZE = "video_group_size"
         private const val KEY_PHOTO_BUCKET_ID = "photo_bucket_id"
         private const val KEY_PHOTO_BUCKET_NAME = "photo_bucket_name"
     }

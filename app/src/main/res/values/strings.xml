@@ -60,6 +60,14 @@
     <string name="summary_busy">处理中…</string>
     <string name="summary_more">+%1$d</string>
     <string name="summary_finish_first">请先撤回已删除的照片或完成本组</string>
+    <string name="summary_pending_video">标记了 %1$d 个视频待删除</string>
+    <string name="summary_empty_video">没有标记删除的视频</string>
+    <string name="summary_deleted_count_video">%1$d 个视频已移入回收站</string>
+    <string name="summary_group_info_video">本组共 %1$d 个视频</string>
+    <string name="summary_delete_n_video">删除 %1$d 个视频</string>
+    <string name="summary_keep_video">暂不删除</string>
+    <string name="summary_next_group">下一组</string>
+    <string name="summary_review_video">返回视频</string>
 
     <string name="batch_trash_success">已移入系统回收站</string>
     <string name="batch_restore_success">已从回收站恢复</string>
@@ -82,6 +90,7 @@
     <string name="settings_title">设置</string>
     <string name="settings_browse_section">浏览</string>
     <string name="settings_group_size">每组数量</string>
+    <string name="settings_video_group_size">视频每组数量</string>
     <string name="settings_group_size_value">%1$d 张</string>
     <string name="settings_double_tap">双击手势</string>
     <string name="settings_double_tap_favorite">收藏</string>

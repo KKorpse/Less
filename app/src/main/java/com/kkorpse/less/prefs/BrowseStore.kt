@@ -43,6 +43,13 @@ class BrowseStore(context: Context) {
             prefs.edit().putInt(KEY_CURSOR, value.coerceAtLeast(0)).apply()
         }
 
+    /** 视频顺序游标：每组接着上一组往下取。 */
+    var videoCursor: Int
+        get() = prefs.getInt(KEY_VIDEO_CURSOR, 0)
+        set(value) {
+            prefs.edit().putInt(KEY_VIDEO_CURSOR, value.coerceAtLeast(0)).apply()
+        }
+
     val deletedPhotoCount: Int get() = deletedPhotos
     val deletedVideoCount: Int get() = deletedVideos
 
@@ -182,5 +189,6 @@ class BrowseStore(context: Context) {
         private const val KEY_DELETED_VIDEOS = "deleted_videos"
         private const val KEY_CURSOR = "sequential_cursor"
         private const val KEY_CURRENT_GROUP = "current_group"
+        private const val KEY_VIDEO_CURSOR = "video_cursor"
     }
 }
