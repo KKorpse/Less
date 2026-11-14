@@ -46,6 +46,12 @@
     <string name="photo_info_title">照片信息</string>
     <string name="photo_info_desc">照片信息</string>
 
+    <string name="review_title">回顾完毕</string>
+    <string name="review_subtitle">请确认需要删除的照片</string>
+    <string name="review_subtitle_count">共标记 %1$d 张，默认全部勾选，点图片可以取消</string>
+    <string name="review_discard">放弃，再来一组</string>
+    <string name="review_confirm">确认删除</string>
+    <string name="review_confirm_n">确认删除（%1$d）</string>
     <string name="summary_title_done">本组已看完</string>
     <string name="summary_title_deleted">已移入系统回收站</string>
     <string name="summary_pending">标记了 %1$d 张照片待删除</string>

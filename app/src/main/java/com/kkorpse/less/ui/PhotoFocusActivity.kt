@@ -5,6 +5,8 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
+import android.view.View
+import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -38,12 +40,19 @@ import kotlinx.coroutines.launch
 
 class PhotoFocusActivity : AppCompatActivity() {
 
+    companion object {
+        /** 上滑到卡片高度的 8% 就算要删除，手指不松开时表现为顶部红光逐渐亮起。 */
+        private const val SWIPE_THRESHOLD = 0.08f
+    }
+
     private lateinit var binding: ActivityPhotoFocusBinding
     private val viewModel: PhotoFocusViewModel by viewModels()
 
     private lateinit var adapter: PhotoFocusAdapter
     private lateinit var layoutManager: LinearLayoutManager
     private lateinit var batchController: BatchTrashController
+    private var lastDeleteItems: List<MediaItem> = emptyList()
+    private var exitingView: View? = null
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
     private val colorResolver = PhotoColorResolver()
@@ -79,10 +88,9 @@ class PhotoFocusActivity : AppCompatActivity() {
         adapter = PhotoFocusAdapter(
             doubleTapAction = app.preferences.doubleTapAction,
             onFavorite = ::toggleFavorite,
-            onBatchDelete = ::requestBatchDelete,
-            onFinish = ::finishGroup,
-            onUndoBatch = ::requestBatchUndo,
-            onReview = ::reviewPhotos
+            onTogglePending = { entry -> viewModel.togglePendingSelection(entry.item) },
+            onConfirmDelete = ::requestBatchDelete,
+            onDiscardGroup = ::discardGroup
         )
 
         layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
@@ -172,14 +180,8 @@ class PhotoFocusActivity : AppCompatActivity() {
                 target: RecyclerView.ViewHolder
             ): Boolean = false
 
-            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-                val position = viewHolder.bindingAdapterPosition
-                val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
-                markForDeletion(position, page)
-            }
-
-            // 上滑很短一段就算删除（默认 0.24 太高，需要滑很长）。
-            override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = 0.06f
+            override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float =
+                SWIPE_THRESHOLD
 
             override fun getSwipeEscapeVelocity(defaultValue: Float): Float =
                 defaultValue.coerceAtMost(600f)
@@ -196,16 +198,18 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val card = viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)
                 if (card != null) {
                     if (isCurrentlyActive && dY < 0f) {
-                        // 阈值只有 6%，动画进度用 30% 高度做归一化，短距离也能看出缩小淡出。
-                        val progress = (-dY / (viewHolder.itemView.height * 0.3f))
+                        // 以「触发删除的距离」为 1，红光与缩小同步渐变。
+                        val progress = (-dY / (viewHolder.itemView.height * SWIPE_THRESHOLD))
                             .coerceIn(0f, 1f)
-                        card.scaleX = 1f - 0.18f * progress
-                        card.scaleY = 1f - 0.18f * progress
-                        card.alpha = 1f - 0.78f * progress
+                        card.scaleX = 1f - 0.10f * progress
+                        card.scaleY = 1f - 0.10f * progress
+                        card.alpha = 1f - 0.45f * progress
+                        binding.swipeGlow.alpha = progress * 0.9f
                     } else {
                         card.scaleX = 1f
                         card.scaleY = 1f
                         card.alpha = 1f
+                        if (!isCurrentlyActive) binding.swipeGlow.alpha = 0f
                     }
                 }
                 super.onChildDraw(
@@ -219,10 +223,36 @@ class PhotoFocusActivity : AppCompatActivity() {
                 )
             }
 
+            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
+                val position = viewHolder.bindingAdapterPosition
+                val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
+                val view = viewHolder.itemView
+                exitingView = view
+                binding.swipeGlow.animate().alpha(0f).setDuration(120).start()
+                // 先播放缩小上移的退场动画，再从列表里移除，避免卡片“啪”一下消失。
+                view.post {
+                    view.animate()
+                        .translationY(-view.height * 0.28f)
+                        .scaleX(0.86f)
+                        .scaleY(0.86f)
+                        .alpha(0f)
+                        .setDuration(180L)
+                        .setInterpolator(DecelerateInterpolator())
+                        .withEndAction {
+                            if (exitingView === view) exitingView = null
+                            markForDeletion(position, page)
+                        }
+                        .start()
+                }
+            }
+
             override fun clearView(
                 recyclerView: RecyclerView,
                 viewHolder: RecyclerView.ViewHolder
             ) {
+                binding.swipeGlow.alpha = 0f
+                // 正在播放退场动画的卡片不要被 ItemTouchHelper 重置回原状。
+                if (viewHolder.itemView === exitingView) return
                 viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)?.let {
                     it.scaleX = 1f
                     it.scaleY = 1f
@@ -321,9 +351,7 @@ class PhotoFocusActivity : AppCompatActivity() {
             is FocusPage.Summary -> {
                 locationJob?.cancel()
                 binding.bottomBar.isVisible = false
-                if (page.pending.isEmpty() && page.deleted.isEmpty() &&
-                    !page.busy && viewModel.autoNextGroup
-                ) {
+                if (page.pending.isEmpty() && !page.busy && viewModel.autoNextGroup) {
                     viewModel.loadNextGroup()
                 }
             }
@@ -470,19 +498,26 @@ class PhotoFocusActivity : AppCompatActivity() {
     }
 
     private fun requestBatchDelete() {
-        val pending = viewModel.pendingEntries()
-        if (pending.isEmpty() || batchController.isBusy) return
+        val selected = viewModel.selectedEntries()
+        if (selected.isEmpty() || batchController.isBusy) return
+        lastDeleteItems = selected.map { it.item }
         viewModel.setBatchBusy(true)
-        batchController.request(pending.map { it.item }, trash = true)
+        batchController.request(lastDeleteItems, trash = true)
         refreshUndo()
     }
 
-    private fun requestBatchUndo() {
-        val deleted = viewModel.deletedEntries()
-        if (deleted.isEmpty() || batchController.isBusy) return
-        pendingScrollOriginalIndex = deleted.lastOrNull()?.originalIndex
-        viewModel.setBatchBusy(true)
-        batchController.request(deleted.map { it.item }, trash = false)
+    /** 放弃这一组的删除标记，直接进入下一组。 */
+    private fun discardGroup() {
+        viewModel.discardGroup()
+        advanceAfterGroup()
+    }
+
+    private fun advanceAfterGroup() {
+        if (viewModel.autoNextGroup) {
+            viewModel.loadNextGroup()
+        } else {
+            finish()
+        }
     }
 
     private fun handleBatchResult(trash: Boolean, success: Boolean) {
@@ -491,21 +526,14 @@ class PhotoFocusActivity : AppCompatActivity() {
             refreshUndo()
             return
         }
-
         if (trash) {
-            viewModel.markBatchDeleted()
+            viewModel.completeBatchDelete(lastDeleteItems)
+            lastDeleteItems = emptyList()
             Toast.makeText(this, R.string.batch_trash_success, Toast.LENGTH_SHORT).show()
-        } else {
-            val deleted = viewModel.deletedEntries()
-            pendingScrollOriginalIndex = deleted.lastOrNull()?.originalIndex
-            viewModel.undoBatchDeleted()
-            Toast.makeText(this, R.string.batch_restore_success, Toast.LENGTH_SHORT).show()
+            // 删除完成直接进下一组，不再让用户二次确认。
+            advanceAfterGroup()
         }
         refreshUndo()
     }
 
-    private fun reviewPhotos() {
-        val index = viewModel.pages.value.indexOfLast { it is FocusPage.Photo }
-        if (index >= 0) scrollTo(index)
-    }
 }

@@ -32,6 +32,20 @@ object MediaFavorites {
 
     fun isSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
 
+    /** 回读媒体库里的收藏位，确认这次写入真的生效。 */
+    fun verify(resolver: ContentResolver, uris: List<Uri>, favorite: Boolean): Boolean {
+        if (!isSupported() || uris.isEmpty()) return false
+        return uris.all { uri ->
+            val value = runCatching {
+                resolver.query(uri, arrayOf(MediaStore.MediaColumns.IS_FAVORITE), null, null, null)
+                    ?.use { cursor ->
+                        if (cursor.moveToFirst()) cursor.getInt(0) == 1 else null
+                    }
+            }.getOrNull()
+            value == favorite
+        }
+    }
+
     fun isMediaStoreMedia(item: MediaItem): Boolean =
         item.id != 0L && item.uri.authority == MediaStore.AUTHORITY
 
@@ -45,10 +59,10 @@ object MediaFavorites {
         if (uris.isEmpty()) return Result.Unsupported
 
         if (Build.VERSION.SDK_INT >= 36) {
-            val applied = runCatching {
-                MediaStore.markIsFavoriteStatus(resolver, uris, favorite)
-            }.isSuccess
-            if (applied) return Result.Applied
+            runCatching { MediaStore.markIsFavoriteStatus(resolver, uris, favorite) }
+            // 部分 ROM 的 markIsFavoriteStatus 是空实现：调用不报错但不改数据，
+            // 所以这里必须回读确认，没写进去就退回系统确认框。
+            if (verify(resolver, uris, favorite)) return Result.Applied
         }
 
         return runCatching {

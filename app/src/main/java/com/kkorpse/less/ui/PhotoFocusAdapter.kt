@@ -5,11 +5,9 @@ import android.view.LayoutInflater
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
-import android.widget.ImageView
-import android.widget.LinearLayout
-import android.widget.TextView
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.GridLayoutManager
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil3.dispose
@@ -17,28 +15,24 @@ import coil3.load
 import coil3.request.crossfade
 import coil3.request.error
 import coil3.request.placeholder
-import com.google.android.material.imageview.ShapeableImageView
-import com.google.android.material.shape.ShapeAppearanceModel
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaItem
-import com.kkorpse.less.databinding.ItemGroupSummaryBinding
 import com.kkorpse.less.databinding.ItemPhotoFocusBinding
+import com.kkorpse.less.databinding.ItemPhotoReviewBinding
 import com.kkorpse.less.prefs.DoubleTapAction
 import com.kkorpse.less.util.dp
 
 class PhotoFocusAdapter(
     private val doubleTapAction: DoubleTapAction,
     private val onFavorite: (MediaItem) -> Unit,
-    private val onBatchDelete: () -> Unit,
-    private val onFinish: () -> Unit,
-    private val onUndoBatch: () -> Unit,
-    private val onReview: () -> Unit
+    private val onTogglePending: (PendingDelete) -> Unit,
+    private val onConfirmDelete: () -> Unit,
+    private val onDiscardGroup: () -> Unit
 ) : ListAdapter<FocusPage, RecyclerView.ViewHolder>(Diff) {
 
     companion object {
         private const val TYPE_PHOTO = 0
         private const val TYPE_SUMMARY = 1
-        private const val MAX_SUMMARY_THUMBS = 6
     }
 
     private var contentTop = 0
@@ -63,7 +57,7 @@ class PhotoFocusAdapter(
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
         return if (viewType == TYPE_SUMMARY) {
-            SummaryViewHolder(ItemGroupSummaryBinding.inflate(inflater, parent, false))
+            SummaryViewHolder(ItemPhotoReviewBinding.inflate(inflater, parent, false))
         } else {
             PhotoViewHolder(ItemPhotoFocusBinding.inflate(inflater, parent, false))
         }
@@ -79,7 +73,6 @@ class PhotoFocusAdapter(
     override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
         when (holder) {
             is PhotoViewHolder -> holder.dispose()
-            is SummaryViewHolder -> holder.disposeThumbs()
         }
         super.onViewRecycled(holder)
     }
@@ -153,123 +146,61 @@ class PhotoFocusAdapter(
     }
 
     inner class SummaryViewHolder(
-        private val binding: ItemGroupSummaryBinding
+        private val binding: ItemPhotoReviewBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        fun bind(summary: FocusPage.Summary) {
-            val deleting = summary.deleted.isNotEmpty()
-            val items = if (deleting) summary.deleted.map { it.item } else summary.pending.map { it.item }
+        private val gridAdapter = ReviewGridAdapter { entry -> onTogglePending(entry) }
 
-            binding.summaryTitle.text = binding.root.context.getString(
-                if (deleting) R.string.summary_title_deleted else R.string.summary_title_done
+        init {
+            binding.reviewGrid.layoutManager = GridLayoutManager(
+                binding.root.context,
+                3
             )
-            binding.summarySubtitle.text = when {
-                deleting -> binding.root.context.getString(
-                    R.string.summary_deleted_count,
-                    summary.deleted.size
-                )
-
-                summary.pending.isNotEmpty() -> binding.root.context.getString(
-                    R.string.summary_pending,
-                    summary.pending.size
-                )
-
-                else -> binding.root.context.getString(R.string.summary_empty)
-            }
-            binding.summaryGroupInfo.text = binding.root.context.getString(
-                R.string.summary_group_info,
-                summary.groupSize
-            )
-
-            bindThumbnails(items)
-
-            val primary = binding.summaryPrimary
-            val secondary = binding.summarySecondary
-            primary.isEnabled = !summary.busy
-            secondary.isEnabled = !summary.busy
-
-            when {
-                deleting -> {
-                    primary.setText(R.string.summary_undo_delete)
-                    secondary.setText(R.string.summary_finish)
-                    primary.setOnClickListener { onUndoBatch() }
-                    secondary.setOnClickListener { onFinish() }
-                }
-
-                summary.pending.isNotEmpty() -> {
-                    primary.text = binding.root.context.getString(
-                        R.string.summary_delete_n,
-                        summary.pending.size
-                    )
-                    secondary.setText(R.string.summary_keep)
-                    primary.setOnClickListener { onBatchDelete() }
-                    secondary.setOnClickListener { onFinish() }
-                }
-
-                else -> {
-                    primary.setText(R.string.summary_finish)
-                    secondary.setText(R.string.summary_review)
-                    primary.setOnClickListener { onFinish() }
-                    secondary.setOnClickListener { onReview() }
-                    secondary.isVisible = summary.groupSize > 0
-                }
-            }
-
-            if (summary.busy) {
-                primary.setText(R.string.summary_busy)
-                primary.isEnabled = false
-                secondary.isEnabled = false
-            }
+            binding.reviewGrid.adapter = gridAdapter
+            binding.reviewGrid.itemAnimator = null
         }
 
-        private fun bindThumbnails(items: List<MediaItem>) {
-            disposeThumbs()
-            binding.summaryThumbnails.removeAllViews()
-            binding.summaryThumbnails.isVisible = items.isNotEmpty()
-            if (items.isEmpty()) return
+        fun bind(summary: FocusPage.Summary) {
+            val selected = summary.pending.count { it.selected }
+            val hasSelection = selected > 0
+            val busy = summary.busy
 
             val context = binding.root.context
-            val thumbSize = context.dp(64)
-            val thumbGap = context.dp(8)
-            val corner = context.dp(12).toFloat()
-            items.take(MAX_SUMMARY_THUMBS).forEach { item ->
-                val thumb = ShapeableImageView(context).apply {
-                    layoutParams = LinearLayout.LayoutParams(thumbSize, thumbSize).apply {
-                        marginEnd = thumbGap
-                    }
-                    shapeAppearanceModel = ShapeAppearanceModel.builder()
-                        .setAllCornerSizes(corner)
-                        .build()
-                    scaleType = ImageView.ScaleType.CENTER_CROP
-                    contentDescription = item.name
-                    load(item.uri) {
-                        crossfade(120)
-                        placeholder(R.drawable.bg_thumb_placeholder)
-                        error(R.drawable.bg_thumb_error)
-                        size(256, 256)
-                    }
-                }
-                binding.summaryThumbnails.addView(thumb)
-            }
+            binding.reviewSubtitle.text = context.getString(
+                R.string.review_subtitle_count,
+                summary.pending.size
+            )
 
-            if (items.size > MAX_SUMMARY_THUMBS) {
-                val more = TextView(context).apply {
-                    text = context.getString(
-                        R.string.summary_more,
-                        items.size - MAX_SUMMARY_THUMBS
-                    )
-                    setTextColor(context.getColor(R.color.text_secondary))
-                    textSize = 12f
-                    gravity = android.view.Gravity.CENTER
-                }
-                binding.summaryThumbnails.addView(more)
-            }
+            binding.reviewConfirm.text = context.getString(R.string.review_confirm_n, selected)
+            binding.reviewConfirm.isEnabled = hasSelection && !busy
+            binding.reviewConfirm.alpha = if (binding.reviewConfirm.isEnabled) 1f else 0.4f
+            binding.reviewDiscard.isEnabled = !busy
+            if (busy) binding.reviewConfirm.setText(R.string.summary_busy)
+
+            binding.reviewConfirm.setOnClickListener { onConfirmDelete() }
+            binding.reviewDiscard.setOnClickListener { onDiscardGroup() }
+
+            gridAdapter.submitList(summary.pending)
+            updateGridHeight()
         }
 
-        fun disposeThumbs() {
-            for (index in 0 until binding.summaryThumbnails.childCount) {
-                val child = binding.summaryThumbnails.getChildAt(index)
-                if (child is ImageView) child.dispose()
+        /** 卡片里固定露出 4 行，更多图片在网格内部滚动。 */
+        private fun updateGridHeight() {
+            val grid = binding.reviewGrid
+            val gap = binding.root.context.dp(8)
+            grid.post {
+                val width = if (grid.width > 0) {
+                    grid.width
+                } else {
+                    binding.reviewCard.width - binding.reviewCard.paddingStart -
+                        binding.reviewCard.paddingEnd
+                }
+                if (width <= 0) return@post
+                val cell = (width - gap * 2) / 3
+                val height = cell * 4 + gap * 3
+                if (grid.layoutParams.height != height) {
+                    grid.layoutParams = grid.layoutParams.apply { this.height = height }
+                }
             }
         }
     }

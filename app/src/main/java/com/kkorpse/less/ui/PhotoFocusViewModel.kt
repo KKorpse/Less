@@ -22,7 +22,6 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
 
     private val photoPages = mutableListOf<FocusPage.Photo>()
     private val pending = mutableListOf<PendingDelete>()
-    private val deleted = mutableListOf<PendingDelete>()
     private var busy = false
 
     private val _pages = MutableStateFlow<List<FocusPage>>(emptyList())
@@ -68,7 +67,6 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
                     }
                     photoPages.clear()
                     pending.clear()
-                    deleted.clear()
                     groupSize = photos.size
                     photos.forEachIndexed { index, item ->
                         photoPages += FocusPage.Photo(item, index)
@@ -89,7 +87,6 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     fun markForDeletion(page: FocusPage.Photo): Boolean {
-        if (deleted.isNotEmpty()) return false
         val index = photoPages.indexOfFirst { it.item.uri == page.item.uri }
         if (index == -1) return false
         photoPages.removeAt(index)
@@ -111,29 +108,39 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
         emit()
     }
 
-    fun markBatchDeleted() {
-        if (pending.isEmpty()) return
-        pending.forEach { app.browseStore.onTrashed(false) }
-        deleted += pending
-        pending.clear()
-        busy = false
+    /** 汇总页里点一张图：切换是否勾选。 */
+    fun togglePendingSelection(item: MediaItem) {
+        val index = pending.indexOfFirst { it.item.uri == item.uri }
+        if (index < 0) return
+        pending[index] = pending[index].copy(selected = !pending[index].selected)
         emit()
     }
 
-    fun undoBatchDeleted() {
-        if (deleted.isEmpty()) return
-        deleted.forEach {
-            insertPhoto(it)
-            app.browseStore.onRestored(false)
+    /** 汇总页「确认删除」：勾选的移入回收站，然后直接进入下一组。 */
+    fun completeBatchDelete(items: List<MediaItem>) {
+        val uris = items.map { it.uri }.toSet()
+        if (uris.isEmpty()) return
+        pending.filter { it.item.uri in uris }.forEach {
+            app.browseStore.onTrashed(false)
         }
-        deleted.clear()
+        pending.removeAll { it.item.uri in uris }
+        pending.clear()
         busy = false
+        currentIndex = 0
+        emit()
+    }
+
+    /** 汇总页「放弃，再来一组」：丢掉这一组的删除标记。 */
+    fun discardGroup() {
+        pending.clear()
+        busy = false
+        currentIndex = 0
         emit()
     }
 
     fun pendingEntries(): List<PendingDelete> = pending.toList()
 
-    fun deletedEntries(): List<PendingDelete> = deleted.toList()
+    fun selectedEntries(): List<PendingDelete> = pending.filter { it.selected }
 
     fun photoPageIndexOf(originalIndex: Int): Int =
         photoPages.indexOfFirst { it.originalIndex == originalIndex }
@@ -151,7 +158,6 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
     private fun emit() {
         _pages.value = photoPages.toList() + FocusPage.Summary(
             pending = pending.toList(),
-            deleted = deleted.toList(),
             busy = busy,
             groupSize = groupSize
         )

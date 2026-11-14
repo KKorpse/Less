@@ -21,6 +21,15 @@
         android:layout_gravity="top"
         android:background="@drawable/bg_scrim_top" />
 
+    <View
+        android:id="@+id/swipeGlow"
+        android:layout_width="match_parent"
+        android:layout_height="170dp"
+        android:layout_gravity="top"
+        android:alpha="0"
+        android:background="@drawable/bg_swipe_glow"
+        android:importantForAccessibility="no" />
+
     <ImageButton
         android:id="@+id/back"
         android:layout_width="48dp"

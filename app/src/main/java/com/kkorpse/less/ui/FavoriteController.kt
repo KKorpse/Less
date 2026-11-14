@@ -2,6 +2,8 @@ package com.kkorpse.less.ui
 
 import android.app.Activity
 import android.content.Context
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.result.ActivityResultCaller
 import androidx.activity.result.IntentSenderRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -28,6 +30,7 @@ class FavoriteController(
         val favorite: Boolean
     )
 
+    private val handler = Handler(Looper.getMainLooper())
     private var pending: Request? = null
     var isBusy: Boolean = false
         private set
@@ -39,7 +42,21 @@ class FavoriteController(
         pending = null
         isBusy = false
         if (request != null) {
-            onResult(request, result.resultCode == Activity.RESULT_OK)
+            val confirmed = result.resultCode == Activity.RESULT_OK
+            if (!confirmed) {
+                onResult(request, false)
+                return@registerForActivityResult
+            }
+            // 系统确认后回读一次；个别 ROM 写库有延迟，稍等再校验。
+            val uris = request.items.map { it.uri }
+            handler.postDelayed({
+                val applied = MediaFavorites.verify(
+                    context.contentResolver,
+                    uris,
+                    request.favorite
+                )
+                onResult(request, applied)
+            }, 150L)
         }
     }
 

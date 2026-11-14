@@ -10,7 +10,6 @@ sealed class FocusPage {
 
     data class Summary(
         val pending: List<PendingDelete>,
-        val deleted: List<PendingDelete>,
         val busy: Boolean,
         val groupSize: Int
     ) : FocusPage()
@@ -18,5 +17,7 @@ sealed class FocusPage {
 
 data class PendingDelete(
     val item: MediaItem,
-    val originalIndex: Int
+    val originalIndex: Int,
+    /** 汇总页默认全部勾选，点一下取消。 */
+    val selected: Boolean = true
 )

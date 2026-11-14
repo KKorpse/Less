@@ -4,7 +4,7 @@
 
 2.1 版本把照片、视频、统计收敛成**同一个首页的三个模式**：底部是悬浮胶囊导航，照片模式直接展示三张扑克牌，视频模式点一下就直接进入刷视频，不再额外打开新页面。
 
-2.2 版本继续打磨照片浏览：一组看完自动进入下一组；照片按原始比例装进圆角卡片，竖屏 2:3 时横向照片的上下空区会自动铺上照片整体色调；底部胶囊导航再压低 1/3，并给 tab 切换加了淡入淡出动效。2.2.1 继续收小圆角、放大图片可用区域，并让缩放时整张图（连同圆角）一起放大；2.2.2 把首页恢复成三张扑克牌展开的样式，并用单一路径重画卡片圆角与白边。2.2.3 把收藏写进系统媒体库的 `IS_FAVORITE`，让系统相册的收藏和 Less 里的收藏变成同一份数据。2.2.4 把签名固化进仓库，任何机器构建出的 APK 都能直接覆盖安装。2.2.5 在照片入口上方加了相册切换，可以直接选某个文件夹来浏览。2.2.6 修好照片专注的双指缩放，上滑删除变灵敏，同一组照片也不再每次重新随机。2.2.7 让视频也按组浏览，组尾统一确认删除，并修掉删除后视频只有声音没有画面的问题。
+2.2 版本继续打磨照片浏览：一组看完自动进入下一组；照片按原始比例装进圆角卡片，竖屏 2:3 时横向照片的上下空区会自动铺上照片整体色调；底部胶囊导航再压低 1/3，并给 tab 切换加了淡入淡出动效。2.2.1 继续收小圆角、放大图片可用区域，并让缩放时整张图（连同圆角）一起放大；2.2.2 把首页恢复成三张扑克牌展开的样式，并用单一路径重画卡片圆角与白边。2.2.3 把收藏写进系统媒体库的 `IS_FAVORITE`，让系统相册的收藏和 Less 里的收藏变成同一份数据。2.2.4 把签名固化进仓库，任何机器构建出的 APK 都能直接覆盖安装。2.2.5 在照片入口上方加了相册切换，可以直接选某个文件夹来浏览。2.2.6 修好照片专注的双指缩放，上滑删除变灵敏，同一组照片也不再每次重新随机。2.2.7 让视频也按组浏览，组尾统一确认删除，并修掉删除后视频只有声音没有画面的问题。2.2.8 把照片的组尾改成「回顾完毕」九宫格卡片，重做上滑删除的动画和红色微光反馈，并给收藏写入加了回读校验。
 
 ## 功能
 
@@ -26,11 +26,11 @@
 
 ### 照片专注
 
-- 左右滑动切换；上滑标记为待删除（阈值 6% 屏高，轻轻上滑即可）
+- 左右滑动切换；上滑标记为待删除（滑到卡片高度 8% 即触发，拖动时照片轻微缩小、屏幕顶部亮起红色微光，松手后照片缩小上移淡出）
 - 上滑时卡片缩小、淡出、向上消失，不立即打扰系统
 - 可以连续标记多张；整组看完后进入汇总页
-- 汇总页显示待删除数量和缩略图，一次系统确认批量移入回收站
-- 删除后可以「撤回删除」批量恢复
+- 组尾是「回顾完毕」卡片：标题下方提示确认待删照片，三列九宫格展示标记的照片（正方形、默认全选，点一下取消），卡片固定露出 4 行，更多在网格内滚动
+- 卡片左下「放弃，再来一组」，右下「确认删除（N）」：只删除勾选的照片，确认后直接进入下一组
 - 没有待删除标记时，一组看完自动加载下一组；有标记时先处理汇总页，再自动进入下一组
 - 左下角圆形收藏（桃心），右下角圆形撤回（返回箭头），都不带文字；圆按钮 40dp
 - 中间信息气泡与两侧圆按钮等高，两行文字都水平居中：
@@ -103,7 +103,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.2.7（versionCode 16） |
+| 当前版本 | 2.2.8（versionCode 17） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -126,7 +126,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.2.7-debug.apk
+app/build/outputs/apk/debug/Less-v2.2.8-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -148,13 +148,14 @@ dist/Less-v2.2.4-debug.apk
 dist/Less-v2.2.5-debug.apk
 dist/Less-v2.2.6-debug.apk
 dist/Less-v2.2.7-debug.apk
+dist/Less-v2.2.8-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.7-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.8-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -174,7 +175,7 @@ dist/SHA256SUMS.txt
 - 验证签名：
 
   ```bash
-  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.2.7-debug.apk
+  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.2.8-debug.apk
   ```
 
 - **一次性切换**：2.2.3 及更早的 `dist/` 包是原作者机器的 debug keystore 签的，与统一签名不一致，第一次装 2.2.4 必须先卸载旧包（卸载前可按下面的命令备份应用数据）。
@@ -190,7 +191,7 @@ adb exec-out run-as $PKG cat shared_prefs/less_browse.xml > less_browse.xml
 adb exec-out run-as $PKG cat shared_prefs/less_settings.xml > less_settings.xml
 
 adb uninstall $PKG
-adb install -r dist/Less-v2.2.7-debug.apk
+adb install -r dist/Less-v2.2.8-debug.apk
 
 adb shell am force-stop $PKG
 adb shell run-as $PKG mkdir -p shared_prefs
