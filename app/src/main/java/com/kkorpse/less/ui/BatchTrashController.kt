@@ -31,8 +31,11 @@ class BatchTrashController(
         onResult(trash, result.resultCode == Activity.RESULT_OK)
     }
 
-    fun request(items: List<MediaItem>, trash: Boolean) {
-        if (isBusy || items.isEmpty()) return
+    fun request(items: List<MediaItem>, trash: Boolean) =
+        requestUris(items.map { it.uri }, trash)
+
+    fun requestUris(uris: List<android.net.Uri>, trash: Boolean) {
+        if (isBusy || uris.isEmpty()) return
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) {
             Toast.makeText(context, R.string.trash_unsupported, Toast.LENGTH_SHORT).show()
             onResult(trash, false)
@@ -42,7 +45,7 @@ class BatchTrashController(
         try {
             val pendingIntent = MediaStore.createTrashRequest(
                 context.contentResolver,
-                items.map { it.uri },
+                uris,
                 trash
             )
             pendingTrash = trash

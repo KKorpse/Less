@@ -2,6 +2,7 @@ package com.kkorpse.less.ui
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
@@ -53,6 +54,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private lateinit var layoutManager: LinearLayoutManager
     private lateinit var batchController: BatchTrashController
     private var lastDeleteItems: List<MediaItem> = emptyList()
+    private var lastCleanupUris: List<Uri> = emptyList()
     private var exitingView: View? = null
     private var swipeOffsetY = 0f
     private var swipingView: View? = null
@@ -116,7 +118,7 @@ class PhotoFocusActivity : AppCompatActivity() {
         batchController = BatchTrashController(this, this) { trash, success ->
             handleBatchResult(trash, success)
         }
-        favoriteController = FavoriteController(this, this) { request, success ->
+        favoriteController = FavoriteController(this) { request, success ->
             handleFavoriteResult(request, success)
         }
 
@@ -258,28 +260,40 @@ class PhotoFocusActivity : AppCompatActivity() {
                     return
                 }
 
-                // 直接把当前拖动时的缩放/透明度作为动画起点，避免松手瞬间跳回 1x。
-                // ItemTouchHelper 会把 itemView 的 translation 归零，用 card 的位移接住。
-                card.translationY = swipeOffsetY
+                // 记住松手这一刻的真实位移与缩放，退场动画从这里接着走。
+                val startOffset = if (view.translationY < 0f) view.translationY else swipeOffsetY
+                val startScale = card.scaleX
+                val startAlpha = card.alpha
 
-                card.animate()
-                    .translationY(-view.height.toFloat() * 1.05f)
-                    .scaleX(0.5f)
-                    .scaleY(0.5f)
-                    .alpha(0f)
-                    .setDuration(300L)
-                    .setInterpolator(DecelerateInterpolator(1.4f))
-                    .withEndAction {
-                        if (exitingView === view) exitingView = null
-                        markForDeletion(position, page)
-                        // 只复位位移与缩放，alpha 保持 0 交给下一次 bind 还原，
-                        // 避免视图被移除前又闪回原图。
-                        card.translationY = 0f
-                        card.translationX = 0f
-                        card.scaleX = 1f
-                        card.scaleY = 1f
-                    }
-                    .start()
+                // ItemTouchHelper 会在 onSwiped 之后把 itemView 的 translation 归零。
+                // 放到下一帧再设置 card 的位移，否则这一帧 itemView + card 会叠加成双倍偏移（抖动）。
+                view.post {
+                    if (view.parent == null) return@post
+                    view.translationY = 0f
+                    card.translationY = startOffset
+                    card.scaleX = startScale
+                    card.scaleY = startScale
+                    card.alpha = startAlpha
+                    card.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+
+                    card.animate()
+                        .translationY(-view.height.toFloat() * 1.05f)
+                        .scaleX(0.45f)
+                        .scaleY(0.45f)
+                        .alpha(0f)
+                        .setDuration(260L)
+                        .setInterpolator(DecelerateInterpolator(1.6f))
+                        .withEndAction {
+                            card.setLayerType(View.LAYER_TYPE_NONE, null)
+                            if (exitingView === view) exitingView = null
+                            markForDeletion(position, page)
+                            card.translationY = 0f
+                            card.translationX = 0f
+                            card.scaleX = 1f
+                            card.scaleY = 1f
+                        }
+                        .start()
+                }
             }
 
             override fun clearView(
@@ -545,9 +559,15 @@ class PhotoFocusActivity : AppCompatActivity() {
     private fun requestBatchDelete() {
         val selected = viewModel.selectedEntries()
         if (selected.isEmpty() || batchController.isBusy) return
+        val store = (application as LessApp).browseStore
+        // 已收藏的原图不展示，但一起送进回收站，保持「收藏=移动」的语义。
+        val selectedUris = selected.map { it.item.uri }.toSet()
+        lastCleanupUris = store.pendingCleanupUris()
+            .mapNotNull { runCatching { Uri.parse(it) }.getOrNull() }
+            .filter { it !in selectedUris }
         lastDeleteItems = selected.map { it.item }
         viewModel.setBatchBusy(true)
-        batchController.request(lastDeleteItems, trash = true)
+        batchController.requestUris(selectedUris.toList() + lastCleanupUris, trash = true)
         refreshUndo()
     }
 
@@ -573,7 +593,9 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
         if (trash) {
             viewModel.completeBatchDelete(lastDeleteItems)
+            (application as LessApp).browseStore.removePendingCleanup(lastCleanupUris)
             lastDeleteItems = emptyList()
+            lastCleanupUris = emptyList()
             Toast.makeText(this, R.string.batch_trash_success, Toast.LENGTH_SHORT).show()
             // 删除完成直接进下一组，不再让用户二次确认。
             advanceAfterGroup()

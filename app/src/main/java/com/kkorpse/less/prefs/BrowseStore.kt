@@ -134,31 +134,56 @@ class BrowseStore(context: Context) {
 
     fun favoriteUris(): Set<String> = favorites.toSet()
 
-    /** 收藏时记录媒体原来的 RELATIVE_PATH，取消收藏时移回去。 */
-    fun rememberFavoritePath(uri: Uri, path: String?) {
-        if (path.isNullOrBlank()) return
-        val json = runCatching {
-            JSONObject(prefs.getString(KEY_FAVORITE_PATHS, "{}") ?: "{}")
-        }.getOrElse { JSONObject() }
-        json.put(uri.toString(), path)
-        prefs.edit().putString(KEY_FAVORITE_PATHS, json.toString()).apply()
+    /** 收藏副本：原 URI → 副本 URI，以及反向映射。 */
+    fun rememberFavoriteCopy(original: Uri, copy: Uri) {
+        val json = copiesJson()
+        json.put(original.toString(), copy.toString())
+        prefs.edit().putString(KEY_FAVORITE_COPIES, json.toString()).apply()
     }
 
-    fun favoriteOriginalPath(uri: Uri): String? {
-        val json = runCatching {
-            JSONObject(prefs.getString(KEY_FAVORITE_PATHS, "{}") ?: "{}")
-        }.getOrNull() ?: return null
-        return json.optString(uri.toString()).takeIf { it.isNotBlank() }
+    fun favoriteCopyOf(original: Uri): Uri? {
+        val value = copiesJson().optString(original.toString())
+        return value.takeIf { it.isNotBlank() }?.let(Uri::parse)
     }
 
-    fun forgetFavoritePath(uri: Uri) {
-        val json = runCatching {
-            JSONObject(prefs.getString(KEY_FAVORITE_PATHS, "{}") ?: "{}")
-        }.getOrNull() ?: return
-        if (!json.has(uri.toString())) return
-        json.remove(uri.toString())
-        prefs.edit().putString(KEY_FAVORITE_PATHS, json.toString()).apply()
+    fun originalOfCopy(copy: Uri): Uri? {
+        val json = copiesJson()
+        val iterator = json.keys()
+        while (iterator.hasNext()) {
+            val key = iterator.next()
+            if (json.optString(key) == copy.toString()) return Uri.parse(key)
+        }
+        return null
     }
+
+    fun forgetFavoriteCopy(original: Uri) {
+        val json = copiesJson()
+        if (!json.has(original.toString())) return
+        json.remove(original.toString())
+        prefs.edit().putString(KEY_FAVORITE_COPIES, json.toString()).apply()
+    }
+
+    /** 已复制、但原图还没清理掉的媒体，组尾删除确认时一并处理。 */
+    fun pendingCleanupUris(): Set<String> =
+        prefs.getStringSet(KEY_PENDING_CLEANUP, emptySet()) ?: emptySet()
+
+    fun addPendingCleanup(uri: Uri) {
+        val set = pendingCleanupUris().toMutableSet()
+        if (set.add(uri.toString())) {
+            prefs.edit().putStringSet(KEY_PENDING_CLEANUP, set).apply()
+        }
+    }
+
+    fun removePendingCleanup(uris: Collection<Uri>) {
+        val set = pendingCleanupUris().toMutableSet()
+        var changed = false
+        uris.forEach { changed = set.remove(it.toString()) || changed }
+        if (changed) prefs.edit().putStringSet(KEY_PENDING_CLEANUP, set).apply()
+    }
+
+    private fun copiesJson(): JSONObject = runCatching {
+        JSONObject(prefs.getString(KEY_FAVORITE_COPIES, "{}") ?: "{}")
+    }.getOrElse { JSONObject() }
 
     /**
      * 当前这一组照片的 URI（保持顺序）。有它之后，退出照片专注或重开 App
@@ -217,6 +242,7 @@ class BrowseStore(context: Context) {
         private const val KEY_CURSOR = "sequential_cursor"
         private const val KEY_CURRENT_GROUP = "current_group"
         private const val KEY_VIDEO_CURSOR = "video_cursor"
-        private const val KEY_FAVORITE_PATHS = "favorite_paths"
+        private const val KEY_FAVORITE_COPIES = "favorite_copies"
+        private const val KEY_PENDING_CLEANUP = "pending_cleanup"
     }
 }

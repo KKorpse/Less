@@ -116,7 +116,10 @@ class FavoritesActivity : AppCompatActivity() {
             val items = MediaRepository(application, app.browseStore)
                 .loadLibrary(includeFavorites = true)
                 .getOrElse { emptyList() }
-                .filter { it.uri.toString() in favorites }
+                .filter {
+                    it.uri.toString() in favorites ||
+                        com.kkorpse.less.data.FolderFavorites.isInFavorites(it.relativePath)
+                }
 
             favoritePhotos = items.filter { !it.isVideo }
             favoriteVideos = items.filter { it.isVideo }

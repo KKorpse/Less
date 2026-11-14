@@ -51,6 +51,7 @@ class VideoFeedFragment : Fragment() {
     private var attachedUri: Uri? = null
     private var initialApplied = false
     private var lastGroupGeneration = -1
+    private var lastCleanupUris: List<android.net.Uri> = emptyList()
     private var retryCount = 0
     private var pendingPlayPosition: Int? = null
 
@@ -69,7 +70,7 @@ class VideoFeedFragment : Fragment() {
         batchController = BatchTrashController(this, requireContext()) { trash, success ->
             handleBatchResult(trash, success)
         }
-        favoriteController = FavoriteController(this, requireContext()) { request, success ->
+        favoriteController = FavoriteController(requireContext()) { request, success ->
             handleFavoriteResult(request, success)
         }
     }
@@ -445,8 +446,13 @@ class VideoFeedFragment : Fragment() {
         if (pending.isEmpty() || batchController.isBusy) return
         player.pause()
         stopPlayback()
+        val store = (requireActivity().application as LessApp).browseStore
+        val pendingUris = pending.map { it.uri }.toSet()
+        lastCleanupUris = store.pendingCleanupUris()
+            .mapNotNull { runCatching { android.net.Uri.parse(it) }.getOrNull() }
+            .filter { it !in pendingUris }
         viewModel.setBatchBusy(true)
-        batchController.request(pending, trash = true)
+        batchController.requestUris(pendingUris.toList() + lastCleanupUris, trash = true)
         updateSummaryChrome()
     }
 
@@ -464,6 +470,9 @@ class VideoFeedFragment : Fragment() {
             return
         }
         if (trash) {
+            (requireActivity().application as LessApp).browseStore
+                .removePendingCleanup(lastCleanupUris)
+            lastCleanupUris = emptyList()
             viewModel.markBatchDeleted()
             Toast.makeText(requireContext(), R.string.trash_success, Toast.LENGTH_SHORT).show()
             // 删除完成直接进下一组，和照片一致，不再让用户点第二次。
