@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.17 — 2026-11-14
+
+- 修复删除时「飞出去→回原地→再飞出去」：`ItemTouchHelper` 在 `onSwiped` 之后会把 itemView 的 translation 归零，退场动画挂在 itemView 上就会被拉回去。改为动画作用在卡片（`FocusCardLayout`）自身，itemView 归零不影响卡片位置；动画结束只复位位移与缩放，alpha 保持 0 由下一次 bind 还原。
+
 ## 2.2.16 — 2026-11-14
 
 - 收藏写入增加轨迹记录：`markIsFavoriteStatus` 的调用/回读结果、走的是收藏确认框还是写入授权、确认后回读是否生效，都会写进「复制诊断信息」，便于定位 ColorOS 为什么看不到收藏。

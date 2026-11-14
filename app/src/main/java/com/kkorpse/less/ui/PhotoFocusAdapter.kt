@@ -98,6 +98,8 @@ class PhotoFocusAdapter(
             binding.root.translationY = 0f
             binding.root.scaleX = 1f
             binding.root.scaleY = 1f
+            binding.card.translationX = 0f
+            binding.card.translationY = 0f
             binding.card.scaleX = 1f
             binding.card.scaleY = 1f
             binding.card.alpha = 1f

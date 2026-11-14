@@ -242,43 +242,43 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val position = viewHolder.bindingAdapterPosition
                 val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
                 val view = viewHolder.itemView
+                val card = view.findViewById<FocusCardLayout>(R.id.card)
                 exitingView = view
+                binding.swipeGlow.animate().alpha(0f).setDuration(240L).start()
+
+                if (card == null) {
+                    markForDeletion(position, page)
+                    return
+                }
+
+                // ItemTouchHelper 在 onSwiped 之后会把 itemView 的 translation 归零，
+                // 所以退场动画必须作用在 card 上，否则会出现「飞出去→回原地→再飞出去」。
                 val startOffset = swipeOffsetY
                 val startProgress = (-startOffset /
                     (view.height.coerceAtLeast(1) * SWIPE_THRESHOLD)).coerceIn(0f, 1f)
-                // 卡片自身的拖动缩放交还给 itemView 统一控制，避免两套 transform 打架。
-                view.findViewById<FocusCardLayout>(R.id.card)?.let {
-                    it.scaleX = 1f
-                    it.scaleY = 1f
-                    it.alpha = 1f
-                }
-                // 红光跟着一起收掉，和卡片的退场同步。
-                binding.swipeGlow.animate().alpha(0f).setDuration(240L).start()
-                // 从手指抬起时的位置/缩放继续，一边缩小一边飞出屏幕顶部。
-                view.post {
-                    view.translationY = startOffset
-                    view.scaleX = 1f - 0.10f * startProgress
-                    view.scaleY = 1f - 0.10f * startProgress
-                    view.alpha = 1f
-                    view.animate()
-                        .translationY(-view.height.toFloat() * 1.05f)
-                        .scaleX(0.5f)
-                        .scaleY(0.5f)
-                        .alpha(0f)
-                        .setDuration(300L)
-                        .setInterpolator(DecelerateInterpolator(1.4f))
-                        .withEndAction {
-                            if (exitingView === view) exitingView = null
-                            markForDeletion(position, page)
-                            // 复位位移与缩放，避免复用时位置错乱；alpha 保持 0，
-                            // 由 bind() 在下一张绑定时还原，避免删除后闪一下原图。
-                            view.translationY = 0f
-                            view.translationX = 0f
-                            view.scaleX = 1f
-                            view.scaleY = 1f
-                        }
-                        .start()
-                }
+                card.translationY = startOffset
+                card.scaleX = 1f - 0.10f * startProgress
+                card.scaleY = 1f - 0.10f * startProgress
+                card.alpha = 1f
+
+                card.animate()
+                    .translationY(-view.height.toFloat() * 1.05f)
+                    .scaleX(0.5f)
+                    .scaleY(0.5f)
+                    .alpha(0f)
+                    .setDuration(300L)
+                    .setInterpolator(DecelerateInterpolator(1.4f))
+                    .withEndAction {
+                        if (exitingView === view) exitingView = null
+                        markForDeletion(position, page)
+                        // 只复位位移与缩放，alpha 保持 0 交给下一次 bind 还原，
+                        // 避免视图被移除前又闪回原图。
+                        card.translationY = 0f
+                        card.translationX = 0f
+                        card.scaleX = 1f
+                        card.scaleY = 1f
+                    }
+                    .start()
             }
 
             override fun clearView(
