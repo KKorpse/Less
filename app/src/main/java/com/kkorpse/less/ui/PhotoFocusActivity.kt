@@ -195,6 +195,8 @@ class PhotoFocusActivity : AppCompatActivity() {
                 actionState: Int,
                 isCurrentlyActive: Boolean
             ) {
+                // 已经在播退场动画的卡片，不要再被重置成不透明。
+                if (viewHolder.itemView === exitingView) return
                 val card = viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)
                 if (card != null) {
                     if (isCurrentlyActive && dY < 0f) {
@@ -228,16 +230,17 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
                 val view = viewHolder.itemView
                 exitingView = view
-                binding.swipeGlow.animate().alpha(0f).setDuration(120).start()
-                // 先播放缩小上移的退场动画，再从列表里移除，避免卡片“啪”一下消失。
+                // 红光跟着一起收掉，和卡片的退场同步。
+                binding.swipeGlow.animate().alpha(0f).setDuration(240L).start()
+                // 卡片一边缩小一边向上方远端飞走，动画播完再从列表里移除。
                 view.post {
                     view.animate()
-                        .translationY(-view.height * 0.28f)
-                        .scaleX(0.86f)
-                        .scaleY(0.86f)
+                        .translationY(-view.height * 0.92f)
+                        .scaleX(0.55f)
+                        .scaleY(0.55f)
                         .alpha(0f)
-                        .setDuration(180L)
-                        .setInterpolator(DecelerateInterpolator())
+                        .setDuration(260L)
+                        .setInterpolator(DecelerateInterpolator(1.8f))
                         .withEndAction {
                             if (exitingView === view) exitingView = null
                             markForDeletion(position, page)
