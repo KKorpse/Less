@@ -258,6 +258,11 @@ class VideoFeedFragment : Fragment() {
 
                     adapter.submitList(state.pages) {
                         if (_binding == null) return@submitList
+                        // 初次加载时 pages 还是空列表，不能对空区间做 coerceIn。
+                        if (state.pages.isEmpty()) {
+                            stopPlayback()
+                            return@submitList
+                        }
                         if (empty) {
                             stopPlayback()
                             return@submitList
@@ -267,7 +272,7 @@ class VideoFeedFragment : Fragment() {
                         pendingPlayPosition = null
 
                         if (requested != null) {
-                            val target = requested.coerceIn(state.pages.indices)
+                            val target = requested.coerceIn(0, state.pages.lastIndex)
                             binding.pager.setCurrentItem(target, false)
                             binding.pager.post {
                                 retryCount = 0
@@ -279,7 +284,7 @@ class VideoFeedFragment : Fragment() {
 
                         if (!initialApplied) {
                             initialApplied = true
-                            val index = viewModel.currentIndex.coerceIn(state.pages.indices)
+                            val index = viewModel.currentIndex.coerceIn(0, state.pages.lastIndex)
                             binding.pager.setCurrentItem(index, false)
                             updateOverlay(index)
                             binding.pager.post {

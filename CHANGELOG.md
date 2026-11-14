@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.12 — 2026-11-14
+
+- 修复进入视频 tab 闪退：首次加载时 `pages` 还是空列表，`coerceIn(pages.indices)` 在空区间 `0..-1` 上抛 `IllegalArgumentException`。改为空列表直接返回，并用 `coerceIn(0, lastIndex)`。
+- 补充 Robolectric 用例：启动后切到视频、统计 tab。
+
 ## 2.2.11 — 2026-11-14
 
 - 启动改为按需创建 tab：只有真正切到「视频」「统计」时才创建对应 Fragment，避免启动阶段初始化 ExoPlayer 等重组件。
