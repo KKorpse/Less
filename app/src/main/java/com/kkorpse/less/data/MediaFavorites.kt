@@ -6,6 +6,7 @@ import android.content.IntentSender
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
+import com.kkorpse.less.Diagnostics
 
 /**
  * 把收藏写进系统媒体库（MediaStore.MediaColumns.IS_FAVORITE），让系统相册的
@@ -89,18 +90,26 @@ object MediaFavorites {
         if (uris.isEmpty()) return Result.Unsupported
 
         if (Build.VERSION.SDK_INT >= 36) {
-            runCatching { MediaStore.markIsFavoriteStatus(resolver, uris, favorite) }
+            val callOk = runCatching {
+                MediaStore.markIsFavoriteStatus(resolver, uris, favorite)
+            }.isSuccess
             // 部分 ROM 的 markIsFavoriteStatus 是空实现：调用不报错但不改数据，
             // 所以这里必须回读确认，没写进去就退回系统确认框。
-            if (verify(resolver, uris, favorite)) return Result.Applied
+            val verified = verify(resolver, uris, favorite)
+            Diagnostics.recordFavorite(
+                "markIsFavoriteStatus call=$callOk verified=$verified value=$favorite"
+            )
+            if (verified) return Result.Applied
         }
 
         val favoriteRequest = runCatching {
             MediaStore.createFavoriteRequest(resolver, uris, favorite)
         }.getOrNull()
         if (favoriteRequest != null) {
+            Diagnostics.recordFavorite("createFavoriteRequest -> 系统确认框")
             return Result.NeedsConfirmation(favoriteRequest.intentSender, Mode.FAVORITE)
         }
+        Diagnostics.recordFavorite("createFavoriteRequest 不可用，改用 createWriteRequest")
 
         // 部分 ROM 没实现 createFavoriteRequest，退回“申请写权限 + 自己更新 IS_FAVORITE”。
         return runCatching {

@@ -13,6 +13,7 @@ object Diagnostics {
 
     private const val MAX_ERRORS = 40
     private val errors = ArrayDeque<String>()
+    private val favoriteLog = ArrayDeque<String>()
 
     fun recordError(uri: String, throwable: Throwable?) {
         val line = buildString {
@@ -27,6 +28,13 @@ object Diagnostics {
         synchronized(errors) {
             errors.addLast(line)
             while (errors.size > MAX_ERRORS) errors.removeFirst()
+        }
+    }
+
+    fun recordFavorite(line: String) {
+        synchronized(favoriteLog) {
+            favoriteLog.addLast("${System.currentTimeMillis()} $line")
+            while (favoriteLog.size > 20) favoriteLog.removeFirst()
         }
     }
 
@@ -48,6 +56,8 @@ object Diagnostics {
             appendLine("photo group: ${app?.preferences?.groupSize ?: 0} / video group: ${app?.preferences?.videoGroupSize ?: 0}")
             appendLine("--- startup breadcrumbs ---")
             appendLine(Breadcrumbs.text())
+            appendLine("--- favorite writes (${synchronized(favoriteLog) { favoriteLog.size }}) ---")
+            synchronized(favoriteLog) { favoriteLog.forEach { appendLine(it) } }
             appendLine("--- image load errors (${synchronized(errors) { errors.size }}) ---")
             synchronized(errors) { errors.forEach { appendLine(it) } }
         }.trim()

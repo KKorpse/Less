@@ -44,6 +44,9 @@ class FavoriteController(
         isBusy = false
         if (request != null) {
             val confirmed = result.resultCode == Activity.RESULT_OK
+            com.kkorpse.less.Diagnostics.recordFavorite(
+                "confirm mode=$pendingMode resultCode=${result.resultCode}"
+            )
             if (!confirmed) {
                 onResult(request, false)
                 return@registerForActivityResult
@@ -59,6 +62,9 @@ class FavoriteController(
                     context.contentResolver,
                     uris,
                     request.favorite
+                )
+                com.kkorpse.less.Diagnostics.recordFavorite(
+                    "after confirm verified=$applied value=${request.favorite}"
                 )
                 onResult(request, applied)
             }, 150L)
