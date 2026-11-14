@@ -48,6 +48,8 @@
 ### 视频
 
 - 纵向全屏流，进入自动播放，上下滑动切换
+- 视频按原始比例完整显示（`fit`），横屏视频不会被裁剪；旋转平板切换横竖屏正常
+- 每组换组后从第一页开始，不会停在上一组的位置
 - 和照片一样按组浏览，每组数量在设置里单独配置（默认 10）
 - 右侧无文字圆形按钮，由上到下：**收藏 / 删除标记 / 撤回标记**
 - 点删除只是标记并自动跳到下一个视频，不再每次都弹系统确认框
@@ -105,7 +107,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.2.21（versionCode 30） |
+| 当前版本 | 2.2.22（versionCode 31） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -128,7 +130,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.2.21-debug.apk
+app/build/outputs/apk/debug/Less-v2.2.22-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -164,13 +166,14 @@ dist/Less-v2.2.18-debug.apk
 dist/Less-v2.2.19-debug.apk
 dist/Less-v2.2.20-debug.apk
 dist/Less-v2.2.21-debug.apk
+dist/Less-v2.2.22-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.21-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.22-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -190,7 +193,7 @@ dist/SHA256SUMS.txt
 - 验证签名：
 
   ```bash
-  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.2.21-debug.apk
+  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.2.22-debug.apk
   ```
 
 - **一次性切换**：2.2.3 及更早的 `dist/` 包是原作者机器的 debug keystore 签的，与统一签名不一致，第一次装 2.2.4 必须先卸载旧包（卸载前可按下面的命令备份应用数据）。
@@ -206,7 +209,7 @@ adb exec-out run-as $PKG cat shared_prefs/less_browse.xml > less_browse.xml
 adb exec-out run-as $PKG cat shared_prefs/less_settings.xml > less_settings.xml
 
 adb uninstall $PKG
-adb install -r dist/Less-v2.2.21-debug.apk
+adb install -r dist/Less-v2.2.22-debug.apk
 
 adb shell am force-stop $PKG
 adb shell run-as $PKG mkdir -p shared_prefs

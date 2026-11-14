@@ -42,6 +42,10 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
     var currentIndex: Int = 0
         private set
 
+    /** 每次成功切到新的一组就 +1，界面用它判断要不要把 pager 拉回第一页。 */
+    var groupGeneration: Int = 0
+        private set
+
     fun initialize(sessionItems: List<MediaItem>, startIndex: Int) {
         if (initialized) return
         initialized = true
@@ -85,6 +89,7 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
                         groupSize = group.size
                     }
                     currentIndex = 0
+                    groupGeneration++
                     loadingNext = false
                     emit()
                 }

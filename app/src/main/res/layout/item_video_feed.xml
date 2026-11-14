@@ -10,7 +10,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:contentDescription="@null"
-        android:scaleType="centerCrop" />
+        android:scaleType="fitCenter" />
 
     <androidx.media3.ui.PlayerView
         android:id="@+id/player"
@@ -18,7 +18,7 @@
         android:layout_height="match_parent"
         android:background="@android:color/transparent"
         app:keep_content_on_player_reset="true"
-        app:resize_mode="zoom"
+        app:resize_mode="fit"
         app:shutter_background_color="@android:color/transparent"
         app:surface_type="surface_view"
         app:use_controller="false" />

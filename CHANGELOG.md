@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.22 — 2026-11-14
+
+- 修复视频组尾确认删除后直接跳到「本组没有删除的视频」汇总页：视频页增加了 `groupGeneration`，新一组加载完成时强制把 pager 拉回第一页并开始播放，不再沿用上一组的页码。
+- 视频画面不再被裁剪：`PlayerView` 的 `resize_mode` 从 `zoom` 改为 `fit`，占位缩略图从 `centerCrop` 改为 `fitCenter`，横屏视频按原比例完整显示（上下留黑边），旋转屏幕切换横竖屏也正常。
+
 ## 2.2.21 — 2026-11-14
 
 - 删除动画松手抖动修复：`ItemTouchHelper` 在手指抬起时会再回调一次 `onChildDraw(isCurrentlyActive=false)`，把卡片的 scale 复位成 1、alpha 复位成 1，于是出现「缩小 → 突然放大 → 再飞走」。现在用 `swipingView` 标记正在滑动的那张卡，松手这一帧不做复位；退场动画直接以当前的 scale/alpha 为起点，只把位移接到 `swipeOffsetY`。

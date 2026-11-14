@@ -50,6 +50,7 @@ class VideoFeedFragment : Fragment() {
     private var attachedPosition = RecyclerView.NO_POSITION
     private var attachedUri: Uri? = null
     private var initialApplied = false
+    private var lastGroupGeneration = -1
     private var retryCount = 0
     private var pendingPlayPosition: Int? = null
 
@@ -278,6 +279,20 @@ class VideoFeedFragment : Fragment() {
                             return@submitList
                         }
 
+                        if (viewModel.groupGeneration != lastGroupGeneration) {
+                            // 新的一组：无论之前停在第几页，都回到第一页开始播。
+                            lastGroupGeneration = viewModel.groupGeneration
+                            initialApplied = true
+                            pendingPlayPosition = null
+                            binding.pager.setCurrentItem(0, false)
+                            updateOverlay(0)
+                            binding.pager.post {
+                                retryCount = 0
+                                playAt(0)
+                            }
+                            return@submitList
+                        }
+
                         val requested = pendingPlayPosition
                         pendingPlayPosition = null
 
@@ -462,7 +477,6 @@ class VideoFeedFragment : Fragment() {
     private fun nextGroup() {
         if (viewModel.hasNextGroup()) {
             viewModel.nextGroup()
-            binding.pager.post { binding.pager.setCurrentItem(0, false) }
         } else {
             requireActivity().finish()
         }
