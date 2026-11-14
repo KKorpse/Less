@@ -11,7 +11,8 @@ class PhotoGroupBuilder(
 ) {
 
     suspend fun newGroup(): Result<List<MediaItem>> {
-        return repository.loadPhotos().map { photos ->
+        // 用户选的相册（文件夹）优先，没选就是系统相册全部照片。
+        return repository.loadPhotos(preferences.photoBucketId).map { photos ->
             selectGroup(photos, preferences.groupSize, preferences.browseMode)
         }
     }

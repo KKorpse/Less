@@ -11,3 +11,4 @@ db917a33c20f24a29ce9a8fea7971f7ea2bf37f733ab1ffedaf08496dca626ed  Less-v2.2.1-de
 e00ab12b10ccb6aa8f31b487eee0bbb67d5cb5ade7b60b10b9f7d83f03f648a7  Less-v2.2.2-debug.apk
 f151a1d40a7c5b0794c4609a9d65818ebdb9e4b59d8fd4ceff6884bec4507eea  Less-v2.2.3-debug.apk
 41b4b29403254179cdaf660d0d362409ab532717cab0b2cb9e24addcff7be44d  Less-v2.2.4-debug.apk
+aa2def6761576c13eab939b36ec1e5a6aba5b3381ae100b1546313f25c86b4a0  Less-v2.2.5-debug.apk

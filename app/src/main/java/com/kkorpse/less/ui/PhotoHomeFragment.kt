@@ -22,9 +22,12 @@ import coil3.load
 import coil3.request.crossfade
 import coil3.request.error
 import coil3.request.placeholder
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
+import com.kkorpse.less.data.MediaBucket
 import com.kkorpse.less.data.MediaItem
+import com.kkorpse.less.data.MediaRepository
 import com.kkorpse.less.data.PhotoFocusSession
 import com.kkorpse.less.databinding.FragmentPhotoHomeBinding
 import com.kkorpse.less.prefs.BrowseMode
@@ -38,6 +41,7 @@ class PhotoHomeFragment : Fragment() {
 
     private val viewModel: PhotoHomeViewModel by viewModels()
     private var lastSettingsSignature = ""
+    private lateinit var repository: MediaRepository
 
     private val focusLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
@@ -68,12 +72,53 @@ class PhotoHomeFragment : Fragment() {
         binding.settingsButton.setOnClickListener {
             startActivity(Intent(requireContext(), SettingsActivity::class.java))
         }
+        binding.albumPill.setOnClickListener { showAlbumPicker() }
         binding.emptyRefresh.setOnClickListener {
             viewModel.load(force = true)
         }
 
+        repository = MediaRepository(
+            requireContext(),
+            (requireActivity().application as LessApp).browseStore
+        )
+
         setupInsets()
         observeState()
+    }
+
+    /**
+     * 首页相册切换：列出所有含照片的文件夹（MediaStore bucket），
+     * 选「系统相册」就回到全部照片。
+     */
+    private fun showAlbumPicker() {
+        val app = requireActivity().application as LessApp
+        viewLifecycleOwner.lifecycleScope.launch {
+            val buckets = repository.loadBuckets().getOrElse { emptyList() }
+            if (_binding == null) return@launch
+
+            val labels = ArrayList<String>(buckets.size + 1)
+            labels += getString(R.string.album_all)
+            buckets.forEach { labels += getString(R.string.album_item, it.name, it.count) }
+
+            val selectedId = app.preferences.photoBucketId
+            val checked = buckets.indexOfFirst { it.id == selectedId }
+                .let { if (it >= 0) it + 1 else 0 }
+
+            MaterialAlertDialogBuilder(requireContext())
+                .setTitle(R.string.album_picker_title)
+                .setSingleChoiceItems(labels.toTypedArray(), checked) { dialog, which ->
+                    applyBucket(if (which == 0) null else buckets[which - 1], app)
+                    dialog.dismiss()
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
+    }
+
+    private fun applyBucket(bucket: MediaBucket?, app: LessApp) {
+        app.preferences.photoBucketId = bucket?.id
+        app.preferences.photoBucketName = bucket?.name
+        viewModel.load(force = true)
     }
 
     override fun onResume() {
@@ -133,6 +178,13 @@ class PhotoHomeFragment : Fragment() {
     }
 
     private fun render(state: PhotoHomeState) {
+        val preferences = (requireActivity().application as LessApp).preferences
+        val albumLabel = preferences.photoBucketName?.takeIf { it.isNotBlank() }
+            ?: getString(R.string.album_default)
+        binding.albumName.text = albumLabel
+        binding.albumPill.contentDescription =
+            getString(R.string.album_pill_desc, albumLabel)
+
         binding.countBadge.text = if (state.photos.isEmpty()) "0" else state.photos.size.toString()
         binding.loading.isVisible = state.loading && state.photos.isEmpty()
         binding.emptyPanel.isVisible = !state.loading && state.photos.isEmpty()
@@ -140,6 +192,10 @@ class PhotoHomeFragment : Fragment() {
 
         if (state.photos.isEmpty()) {
             binding.background.setImageDrawable(null)
+            binding.emptyMessage.setText(
+                if (preferences.photoBucketId != null) R.string.album_empty_message
+                else R.string.photo_empty_message
+            )
             return
         }
 

@@ -13,6 +13,13 @@
     <string name="photo_title">照片</string>
     <string name="photo_subtitle">点击卡片开始浏览</string>
     <string name="photo_hint">每组 %1$d 张 · %2$s</string>
+    <string name="album_default">系统相册</string>
+    <string name="album_unknown">未知相册</string>
+    <string name="album_picker_title">选择相册</string>
+    <string name="album_all">系统相册（全部照片）</string>
+    <string name="album_item">%1$s（%2$d）</string>
+    <string name="album_pill_desc">当前相册：%1$s，点击切换</string>
+    <string name="album_empty_message">这个相册里没有照片，换一个相册试试。</string>
     <string name="photo_empty_title">还没有照片</string>
     <string name="photo_empty_message">相册里没有找到照片。</string>
     <string name="photo_loading">正在准备照片…</string>

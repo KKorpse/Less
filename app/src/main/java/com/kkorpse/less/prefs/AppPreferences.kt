@@ -45,6 +45,30 @@ class AppPreferences(context: Context) {
             prefs.edit().putString(KEY_BROWSE_MODE, value.name).apply()
         }
 
+    /** 当前选择的相册（MediaStore BUCKET_ID），null 表示系统相册的全部照片。 */
+    var photoBucketId: String?
+        get() = prefs.getString(KEY_PHOTO_BUCKET_ID, null)?.takeIf { it.isNotBlank() }
+        set(value) {
+            prefs.edit().apply {
+                if (value.isNullOrBlank()) remove(KEY_PHOTO_BUCKET_ID) else putString(
+                    KEY_PHOTO_BUCKET_ID,
+                    value
+                )
+            }.apply()
+        }
+
+    /** 相册显示名，仅用于首页展示，避免每次重新查询。 */
+    var photoBucketName: String?
+        get() = prefs.getString(KEY_PHOTO_BUCKET_NAME, null)?.takeIf { it.isNotBlank() }
+        set(value) {
+            prefs.edit().apply {
+                if (value.isNullOrBlank()) remove(KEY_PHOTO_BUCKET_NAME) else putString(
+                    KEY_PHOTO_BUCKET_NAME,
+                    value
+                )
+            }.apply()
+        }
+
     var locationAsked: Boolean
         get() = prefs.getBoolean(KEY_LOCATION_ASKED, false)
         set(value) {
@@ -60,5 +84,7 @@ class AppPreferences(context: Context) {
         private const val KEY_DOUBLE_TAP = "double_tap"
         private const val KEY_BROWSE_MODE = "browse_mode"
         private const val KEY_LOCATION_ASKED = "location_asked"
+        private const val KEY_PHOTO_BUCKET_ID = "photo_bucket_id"
+        private const val KEY_PHOTO_BUCKET_NAME = "photo_bucket_name"
     }
 }

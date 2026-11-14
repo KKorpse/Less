@@ -32,9 +32,52 @@ class MediaRepository(
         }
     }
 
-    suspend fun loadPhotos(): Result<List<MediaItem>> = withContext(Dispatchers.IO) {
+    suspend fun loadPhotos(bucketId: String? = null): Result<List<MediaItem>> =
+        withContext(Dispatchers.IO) {
+            try {
+                val photos = queryImages(bucketId).sortedByDescending { it.dateMillis }
+                Result.success(syncFavorites(photos))
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                Result.failure(e)
+            }
+        }
+
+    /** 读取所有含照片的相册（按文件夹分组），用于首页的相册切换。 */
+    suspend fun loadBuckets(): Result<List<MediaBucket>> = withContext(Dispatchers.IO) {
         try {
-            Result.success(syncFavorites(queryImages().sortedByDescending { it.dateMillis }))
+            val projection = arrayOf(
+                MediaStore.MediaColumns.BUCKET_ID,
+                MediaStore.MediaColumns.BUCKET_DISPLAY_NAME
+            )
+            val counts = LinkedHashMap<String, Pair<String, Int>>()
+            context.contentResolver.query(
+                MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                projection,
+                baseSelection(),
+                null,
+                "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+            )?.use { cursor ->
+                val idColumn = cursor.getColumnIndex(MediaStore.MediaColumns.BUCKET_ID)
+                val nameColumn =
+                    cursor.getColumnIndex(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
+                if (idColumn < 0) return@use
+                while (cursor.moveToNext()) {
+                    val id = cursor.getString(idColumn) ?: continue
+                    val rawName = if (nameColumn >= 0) cursor.getString(nameColumn) else null
+                    val name = rawName?.takeIf { it.isNotBlank() }
+                        ?: context.getString(com.kkorpse.less.R.string.album_unknown)
+                    val current = counts[id]
+                    counts[id] = if (current == null) name to 1 else current.first to current.second + 1
+                }
+            }
+            val buckets = counts.map { (id, value) ->
+                MediaBucket(id = id, name = value.first, count = value.second)
+            }.sortedWith(
+                compareByDescending<MediaBucket> { it.count }.thenBy { it.name }
+            )
+            Result.success(buckets)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -62,7 +105,7 @@ class MediaRepository(
         }
     }
 
-    private fun queryImages(): List<MediaItem> {
+    private fun queryImages(bucketId: String? = null): List<MediaItem> {
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
@@ -76,8 +119,8 @@ class MediaRepository(
         return context.contentResolver.query(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             projection,
-            baseSelection(),
-            null,
+            baseSelection(bucketId),
+            bucketArgs(bucketId),
             "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
         )?.use { cursor -> readMediaStoreRows(cursor, isVideo = false) } ?: emptyList()
     }
@@ -103,14 +146,20 @@ class MediaRepository(
         )?.use { cursor -> readMediaStoreRows(cursor, isVideo = true) } ?: emptyList()
     }
 
-    private fun baseSelection(): String {
+    private fun baseSelection(bucketId: String? = null): String {
         val clauses = mutableListOf("${MediaStore.MediaColumns.SIZE} > 0")
         clauses += "${MediaStore.MediaColumns.IS_PENDING} = 0"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             clauses += "${MediaStore.MediaColumns.IS_TRASHED} = 0"
         }
+        if (!bucketId.isNullOrBlank()) {
+            clauses += "${MediaStore.MediaColumns.BUCKET_ID} = ?"
+        }
         return clauses.joinToString(" AND ")
     }
+
+    private fun bucketArgs(bucketId: String?): Array<String>? =
+        if (bucketId.isNullOrBlank()) null else arrayOf(bucketId)
 
     private fun readMediaStoreRows(
         cursor: android.database.Cursor,
