@@ -39,6 +39,11 @@ class SettingsActivity : AppCompatActivity() {
 
         setupInsets()
         binding.back.setOnClickListener { finish() }
+        binding.favoriteDialogSwitch.isChecked = preferences.favoriteUseSystemDialog
+        binding.favoriteDialogSwitch.setOnCheckedChangeListener { _, checked ->
+            preferences.favoriteUseSystemDialog = checked
+        }
+
         binding.diagnosticsButton.setOnClickListener {
             val text = com.kkorpse.less.Diagnostics.report(this)
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

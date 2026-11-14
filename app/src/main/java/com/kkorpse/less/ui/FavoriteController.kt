@@ -66,6 +66,9 @@ class FavoriteController(
                 com.kkorpse.less.Diagnostics.recordFavorite(
                     "after confirm verified=$applied value=${request.favorite}"
                 )
+                if (applied) {
+                    MediaFavorites.notifyChanged(context, uris)
+                }
                 onResult(request, applied)
             }, 150L)
         }
@@ -77,8 +80,16 @@ class FavoriteController(
     fun request(items: List<MediaItem>, favorite: Boolean): Boolean {
         if (items.isEmpty()) return false
         if (isBusy) return true
-        return when (val result = MediaFavorites.setFavorite(context.contentResolver, items, favorite)) {
+        val preferDialog = (context.applicationContext as? com.kkorpse.less.LessApp)
+            ?.preferences?.favoriteUseSystemDialog == true
+        return when (val result = MediaFavorites.setFavorite(
+            context.contentResolver,
+            items,
+            favorite,
+            preferDialog
+        )) {
             is MediaFavorites.Result.Applied -> {
+                MediaFavorites.notifyChanged(context, items.map { it.uri })
                 onResult(Request(items, favorite), true)
                 true
             }

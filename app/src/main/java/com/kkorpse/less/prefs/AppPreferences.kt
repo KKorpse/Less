@@ -95,6 +95,13 @@ class AppPreferences(context: Context) {
             prefs.edit().putInt(KEY_PHOTO_GROUP_INDEX, value.coerceAtLeast(0)).apply()
         }
 
+    /** 收藏时优先走系统确认框（排查 ColorOS 收藏相册用）。 */
+    var favoriteUseSystemDialog: Boolean
+        get() = prefs.getBoolean(KEY_FAVORITE_DIALOG, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_FAVORITE_DIALOG, value).apply()
+        }
+
     var locationAsked: Boolean
         get() = prefs.getBoolean(KEY_LOCATION_ASKED, false)
         set(value) {
@@ -114,6 +121,7 @@ class AppPreferences(context: Context) {
         private const val KEY_VIDEO_GROUP_SIZE = "video_group_size"
         private const val KEY_PHOTO_GROUP_KEY = "photo_group_key"
         private const val KEY_PHOTO_GROUP_INDEX = "photo_group_index"
+        private const val KEY_FAVORITE_DIALOG = "favorite_use_dialog"
         private const val KEY_PHOTO_BUCKET_ID = "photo_bucket_id"
         private const val KEY_PHOTO_BUCKET_NAME = "photo_bucket_name"
     }

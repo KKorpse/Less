@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.18 — 2026-11-14
+
+- 修复切到照片模式后仍有视频声音：`ViewPager2` 在重新布局时可能触发 `onPageSelected`，隐藏的 Fragment 也会调用 `playAt()`。现在播放统一受 `canPlay()`（可见 + 前台 + 已 resume）约束，隐藏时只记录位置不播放。
+- 设置新增「收藏时弹出系统确认框」（排查用）：开启后收藏走 `createFavoriteRequest` 确认框路径，而不是 `markIsFavoriteStatus` 直写，用来验证 ColorOS 是否只认确认框。
+- 收藏写入成功后额外 `notifyChange` + 媒体扫描广播，尝试让相册刷新。
+
 ## 2.2.17 — 2026-11-14
 
 - 修复删除时「飞出去→回原地→再飞出去」：`ItemTouchHelper` 在 `onSwiped` 之后会把 itemView 的 translation 归零，退场动画挂在 itemView 上就会被拉回去。改为动画作用在卡片（`FocusCardLayout`）自身，itemView 归零不影响卡片位置；动画结束只复位位移与缩放，alpha 保持 0 由下一次 bind 还原。

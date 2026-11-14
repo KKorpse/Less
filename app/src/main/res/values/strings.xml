@@ -102,6 +102,8 @@
     <string name="settings_group_size">每组数量</string>
     <string name="settings_video_group_size">视频每组数量</string>
     <string name="settings_diagnostics">复制诊断信息</string>
+    <string name="settings_favorite_dialog">收藏时弹出系统确认框</string>
+    <string name="settings_favorite_dialog_desc">排查 ColorOS 收藏相册是否只认系统确认框这条路径，平时不用开。</string>
     <string name="settings_diagnostics_copied">诊断信息已复制</string>
     <string name="settings_group_size_value">%1$d 张</string>
     <string name="settings_double_tap">双击手势</string>

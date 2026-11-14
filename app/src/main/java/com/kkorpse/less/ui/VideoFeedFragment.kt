@@ -185,7 +185,12 @@ class VideoFeedFragment : Fragment() {
         handler.post(progressRunnable)
     }
 
+    /** 只有当前 tab 可见、页面在前台时才允许出声。 */
+    private fun canPlay(): Boolean =
+        _binding != null && !isHidden && isResumed && binding.root.isShown
+
     private fun resumePlayback() {
+        if (!canPlay()) return
         val pages = viewModel.state.value.pages
         if (pages.none { it is VideoPage.Video }) return
         val position = currentVideoPosition() ?: return
@@ -233,7 +238,7 @@ class VideoFeedFragment : Fragment() {
                     binding.videoActions.isVisible = true
                     player.pause()
                     retryCount = 0
-                    playAt(position)
+                    if (canPlay()) playAt(position)
                     updateOverlay(position)
                 } else {
                     binding.videoActions.isVisible = false
@@ -335,6 +340,10 @@ class VideoFeedFragment : Fragment() {
 
     private fun playAt(position: Int) {
         if (_binding == null) return
+        if (!canPlay()) {
+            stopPlayback()
+            return
+        }
         val page = viewModel.state.value.pages.getOrNull(position) as? VideoPage.Video
         if (page == null) {
             stopPlayback()

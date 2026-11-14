@@ -2,7 +2,10 @@ package com.kkorpse.less.data
 
 import android.content.ContentResolver
 import android.content.ContentValues
+import android.content.Context
+import android.content.Intent
 import android.content.IntentSender
+import android.media.MediaScannerConnection
 import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
@@ -63,6 +66,32 @@ object MediaFavorites {
         }
     }
 
+    /**
+     * 写入成功后通知媒体库与相册刷新：notifyChange + 旧版媒体扫描广播。
+     * 收藏标志变化不需要重新扫描文件，但对部分 ROM 的相册刷新有帮助。
+     */
+    fun notifyChanged(context: Context, uris: List<Uri>) {
+        val resolver = context.contentResolver
+        uris.forEach { uri ->
+            runCatching { resolver.notifyChange(uri, null) }
+            runCatching {
+                val path = resolver.query(
+                    uri,
+                    arrayOf(MediaStore.MediaColumns.DATA),
+                    null,
+                    null,
+                    null
+                )?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+                if (!path.isNullOrBlank()) {
+                    MediaScannerConnection.scanFile(context, arrayOf(path), null, null)
+                    context.sendBroadcast(
+                        Intent(Intent.ACTION_MEDIA_SCANNER_SCAN_FILE, uri)
+                    )
+                }
+            }
+        }
+    }
+
     /** 回读媒体库里的收藏位，确认这次写入真的生效。 */
     fun verify(resolver: ContentResolver, uris: List<Uri>, favorite: Boolean): Boolean {
         if (!isSupported() || uris.isEmpty()) return false
@@ -83,11 +112,23 @@ object MediaFavorites {
     fun setFavorite(
         resolver: ContentResolver,
         items: List<MediaItem>,
-        favorite: Boolean
+        favorite: Boolean,
+        preferSystemDialog: Boolean = false
     ): Result {
         if (!isSupported()) return Result.Unsupported
         val uris = items.filter(::isMediaStoreMedia).map { it.uri }
         if (uris.isEmpty()) return Result.Unsupported
+
+        // 排查用：强制走系统确认框，看 ColorOS 是否只认这条路径。
+        if (preferSystemDialog && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+            val dialog = runCatching {
+                MediaStore.createFavoriteRequest(resolver, uris, favorite)
+            }.getOrNull()
+            if (dialog != null) {
+                Diagnostics.recordFavorite("prefer dialog -> createFavoriteRequest")
+                return Result.NeedsConfirmation(dialog.intentSender, Mode.FAVORITE)
+            }
+        }
 
         if (Build.VERSION.SDK_INT >= 36) {
             val callOk = runCatching {
