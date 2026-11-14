@@ -78,9 +78,13 @@ class FocusCardLayout @JvmOverloads constructor(
 
     override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
         val zoomed = (photoView?.scale ?: 1f) > 1.01f
-        // 缩放中或双指操作时把事件留给 PhotoView；1x 单指时交还 RecyclerView 翻页。
-        super.requestDisallowInterceptTouchEvent(
-            if (zoomed || pinching) disallowIntercept else false
-        )
+        // 双指手势一旦开始，整个手势期间都不还给 RecyclerView：
+        // 否则缩回 1x 的瞬间会被当成横向翻页，出现卡顿/页面抖一下。
+        val disallow = when {
+            pinching -> true
+            zoomed -> disallowIntercept
+            else -> false
+        }
+        super.requestDisallowInterceptTouchEvent(disallow)
     }
 }

@@ -12,6 +12,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import coil3.dispose
 import coil3.load
+import coil3.request.allowHardware
 import coil3.request.crossfade
 import coil3.request.error
 import coil3.request.placeholder
@@ -90,6 +91,13 @@ class PhotoFocusAdapter(
         }
 
         fun bind(item: MediaItem) {
+            // 上滑删除的退场动画作用在 itemView 上，回收复用前必须还原，
+            // 否则后续照片会带着 alpha=0 / 位移，看起来就是一张黑图。
+            binding.root.alpha = 1f
+            binding.root.translationX = 0f
+            binding.root.translationY = 0f
+            binding.root.scaleX = 1f
+            binding.root.scaleY = 1f
             binding.card.scaleX = 1f
             binding.card.scaleY = 1f
             binding.card.alpha = 1f
@@ -126,15 +134,21 @@ class PhotoFocusAdapter(
             })
 
             binding.photo.load(item.uri) {
+                // 部分 ROM 上 HDR/10bit 图片用 hardware bitmap 会整块黑屏，这里禁用。
+                allowHardware(false)
                 crossfade(140)
                 listener(
                     onSuccess = { _, _ ->
                         binding.progress.isVisible = false
                         binding.error.isVisible = false
                     },
-                    onError = { _, _ ->
+                    onError = { _, result ->
                         binding.progress.isVisible = false
                         binding.error.isVisible = true
+                        com.kkorpse.less.Diagnostics.recordError(
+                            item.uri.toString(),
+                            result.throwable
+                        )
                     }
                 )
             }

@@ -101,6 +101,11 @@ class VideoFeedFragment : Fragment() {
                     updatePlayIndicator()
                 }
 
+                override fun onRenderedFirstFrame() {
+                    if (_binding == null) return
+                    adapter.showVideoFrame(binding.pager.currentItem)
+                }
+
                 override fun onPlayerError(error: PlaybackException) {
                     if (_binding == null) return
                     adapter.showError(binding.pager.currentItem, true)

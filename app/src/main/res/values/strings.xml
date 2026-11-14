@@ -101,6 +101,8 @@
     <string name="settings_browse_section">浏览</string>
     <string name="settings_group_size">每组数量</string>
     <string name="settings_video_group_size">视频每组数量</string>
+    <string name="settings_diagnostics">复制诊断信息</string>
+    <string name="settings_diagnostics_copied">诊断信息已复制</string>
     <string name="settings_group_size_value">%1$d 张</string>
     <string name="settings_double_tap">双击手势</string>
     <string name="settings_double_tap_favorite">收藏</string>

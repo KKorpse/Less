@@ -1,6 +1,10 @@
 package com.kkorpse.less.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
+import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
@@ -35,6 +39,12 @@ class SettingsActivity : AppCompatActivity() {
 
         setupInsets()
         binding.back.setOnClickListener { finish() }
+        binding.diagnosticsButton.setOnClickListener {
+            val text = com.kkorpse.less.Diagnostics.report(this)
+            val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            clipboard.setPrimaryClip(ClipData.newPlainText("Less diagnostics", text))
+            Toast.makeText(this, R.string.settings_diagnostics_copied, Toast.LENGTH_SHORT).show()
+        }
 
         binding.groupSizeSlider.value = preferences.groupSize.toFloat().coerceIn(3f, 30f)
         updateGroupSizeLabel(preferences.groupSize)

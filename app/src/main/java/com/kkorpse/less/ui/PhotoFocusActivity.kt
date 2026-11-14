@@ -241,6 +241,12 @@ class PhotoFocusActivity : AppCompatActivity() {
                         .withEndAction {
                             if (exitingView === view) exitingView = null
                             markForDeletion(position, page)
+                            // 复位位移与缩放，避免复用时位置错乱；alpha 保持 0，
+                            // 由 bind() 在下一张绑定时还原，避免删除后闪一下原图。
+                            view.translationY = 0f
+                            view.translationX = 0f
+                            view.scaleX = 1f
+                            view.scaleY = 1f
                         }
                         .start()
                 }

@@ -49,6 +49,14 @@ class ReviewGridAdapter(
                 placeholder(R.drawable.bg_thumb_placeholder)
                 error(R.drawable.bg_thumb_error)
                 size(320, 320)
+                listener(
+                    onError = { _, result ->
+                        com.kkorpse.less.Diagnostics.recordError(
+                            entry.item.uri.toString(),
+                            result.throwable
+                        )
+                    }
+                )
             }
             binding.reviewThumb.alpha = if (entry.selected) 1f else 0.35f
             binding.reviewCheck.visibility =

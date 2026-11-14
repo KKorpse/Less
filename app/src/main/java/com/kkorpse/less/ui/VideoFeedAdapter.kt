@@ -101,6 +101,10 @@ class VideoFeedAdapter(
         }
     }
 
+    fun showVideoFrame(position: Int) {
+        videoHolders[position]?.showVideoFrame()
+    }
+
     fun showError(position: Int, show: Boolean) {
         videoHolders[position]?.let { holder ->
             holder.binding.error.isVisible = show
@@ -126,13 +130,27 @@ class VideoFeedAdapter(
                 error(R.drawable.bg_thumb_error)
                 size(1280, 1280)
                 videoFrameMillis(1000L)
+                listener(
+                    onError = { _, result ->
+                        com.kkorpse.less.Diagnostics.recordError(
+                            item.uri.toString(),
+                            result.throwable
+                        )
+                    }
+                )
             }
         }
 
         fun attach(player: androidx.media3.exoplayer.ExoPlayer?) {
             binding.player.player = player
             binding.player.visibility = if (player == null) View.INVISIBLE else View.VISIBLE
-            binding.thumbnail.alpha = if (player == null) 1f else 0f
+            // 缩略图一直盖在播放器上，等真正渲染出第一帧再撤掉，避免中间的黑屏。
+            if (player == null) binding.thumbnail.alpha = 1f
+        }
+
+        /** 播放器渲染出第一帧后调用，这时才把缩略图藏起来。 */
+        fun showVideoFrame() {
+            binding.thumbnail.animate().alpha(0f).setDuration(120L).start()
         }
 
         fun release() {
