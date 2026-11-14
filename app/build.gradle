@@ -19,8 +19,8 @@ android {
         applicationId "com.kkorpse.less"
         minSdk 29
         targetSdk 36
-        versionCode 18
-        versionName "2.2.9"
+        versionCode 19
+        versionName "2.2.10"
 
         vectorDrawables.useSupportLibrary = true
     }
@@ -59,12 +59,24 @@ android {
         viewBinding true
     }
 
+    testOptions {
+        unitTests {
+            includeAndroidResources = true
+            returnDefaultValues = true
+        }
+    }
+
     // 每次构建输出带版本号的文件名，例如 Less-v1.0.0-debug.apk
     applicationVariants.all { variant ->
         variant.outputs.all { output ->
             output.outputFileName = "Less-v${variant.versionName}-${variant.buildType.name}.apk"
         }
     }
+}
+
+tasks.withType(Test).configureEach {
+    systemProperty 'robolectric.dependency.repo.url', 'https://maven.aliyun.com/repository/public'
+    systemProperty 'robolectric.dependency.repo.id', 'aliyun'
 }
 
 dependencies {
@@ -89,4 +101,8 @@ dependencies {
     implementation 'com.github.chrisbanes:PhotoView:2.3.0'
 
     implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-android:1.10.1'
+
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.14.1'
+    testImplementation 'androidx.test:core:1.6.1'
 }

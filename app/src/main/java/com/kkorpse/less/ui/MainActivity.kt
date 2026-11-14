@@ -1,5 +1,8 @@
 package com.kkorpse.less.ui
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Bundle
@@ -18,6 +21,8 @@ import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaRepository
 import com.kkorpse.less.data.MediaSession
@@ -96,6 +101,7 @@ class MainActivity : AppCompatActivity() {
         setupInsets()
         setupActions()
         setupBack()
+        showPendingCrash()
         render()
     }
 
@@ -175,6 +181,15 @@ class MainActivity : AppCompatActivity() {
 
     private fun ensureFragments() {
         if (fragmentsAdded) return
+        try {
+            addFragments()
+        } catch (t: Throwable) {
+            // 页面创建阶段的异常先接住，把堆栈弹出来，避免直接闪退。
+            showCrash(t)
+        }
+    }
+
+    private fun addFragments() {
         val fm = supportFragmentManager
         photoFragment = fm.findFragmentByTag(TAG_PHOTOS) as? PhotoHomeFragment
             ?: PhotoHomeFragment()
@@ -322,6 +337,43 @@ class MainActivity : AppCompatActivity() {
                     .show()
             }
         }
+    }
+
+    /** 上次崩溃时留下的堆栈，启动后直接展示，便于用户反馈。 */
+    private fun showCrash(throwable: Throwable) {
+        val text = android.util.Log.getStackTraceString(throwable)
+        runCatching {
+            java.io.File(filesDir, LessApp.CRASH_FILE).writeText(text)
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.crash_report_title)
+            .setMessage(text.take(6000))
+            .setPositiveButton(R.string.crash_report_copy) { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Less crash", text))
+                Toast.makeText(this, R.string.crash_report_copied, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.crash_report_close, null)
+            .show()
+    }
+
+    private fun showPendingCrash() {
+        val file = LessApp.crashFile(this)
+        if (!file.exists()) return
+        val text = runCatching { file.readText() }.getOrNull().orEmpty()
+        runCatching { file.delete() }
+        if (text.isBlank()) return
+
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.crash_report_title)
+            .setMessage(text.take(6000))
+            .setPositiveButton(R.string.crash_report_copy) { _, _ ->
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Less crash", text))
+                Toast.makeText(this, R.string.crash_report_copied, Toast.LENGTH_SHORT).show()
+            }
+            .setNegativeButton(R.string.crash_report_close, null)
+            .show()
     }
 
     private fun openAppSettings() {

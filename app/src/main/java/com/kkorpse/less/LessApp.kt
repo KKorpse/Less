@@ -7,6 +7,8 @@ import coil3.SingletonImageLoader
 import coil3.video.VideoFrameDecoder
 import com.kkorpse.less.prefs.AppPreferences
 import com.kkorpse.less.prefs.BrowseStore
+import java.io.File
+import java.util.Date
 
 class LessApp : Application(), SingletonImageLoader.Factory {
 
@@ -17,6 +19,7 @@ class LessApp : Application(), SingletonImageLoader.Factory {
 
     override fun onCreate() {
         super.onCreate()
+        installCrashHandler()
         preferences = AppPreferences(this)
         browseStore = BrowseStore(this)
     }
@@ -28,5 +31,35 @@ class LessApp : Application(), SingletonImageLoader.Factory {
                 add(VideoFrameDecoder.Factory())
             }
             .build()
+    }
+
+    /**
+     * 把未捕获异常写到 files/crash.txt，下次启动时在界面上展示，
+     * 方便在没有 adb 的情况下定位线上崩溃。
+     */
+    private fun installCrashHandler() {
+        val previous = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { thread, throwable ->
+            runCatching {
+                val version = packageManager
+                    .getPackageInfo(packageName, 0).versionName
+                val text = buildString {
+                    appendLine("time: ${Date()}")
+                    appendLine("version: $version")
+                    appendLine("thread: ${thread.name}")
+                    appendLine(android.util.Log.getStackTraceString(throwable))
+                }
+                File(filesDir, CRASH_FILE).writeText(text)
+                getExternalFilesDir("logs")?.mkdirs()
+                getExternalFilesDir("logs")?.let { File(it, CRASH_FILE).writeText(text) }
+            }
+            previous?.uncaughtException(thread, throwable)
+        }
+    }
+
+    companion object {
+        const val CRASH_FILE = "crash.txt"
+
+        fun crashFile(context: Context): File = File(context.filesDir, CRASH_FILE)
     }
 }

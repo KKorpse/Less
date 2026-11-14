@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.10 — 2026-11-14
+
+- 增加崩溃日志捕获：未捕获异常写入 `files/crash.txt`，下次启动直接弹窗显示并支持复制，方便没有 adb 时反馈堆栈。
+- 页面创建阶段（`ensureFragments`）的异常也会被接住并展示，而不是直接闪退。
+- 新增 Robolectric 启动测试（授权后启动 MainActivity），供本地回归使用。
+
 ## 2.2.9 — 2026-11-14
 
 - 修复授权后闪退：视频页的批量删除控制器之前在 `MainActivity.onResume` 里向已 RESUMED 的 Activity 注册 ActivityResult，会抛 `IllegalStateException`。改为注册在 Fragment 上，和照片页保持一致。

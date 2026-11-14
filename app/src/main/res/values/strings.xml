@@ -13,6 +13,10 @@
     <string name="photo_title">照片</string>
     <string name="photo_subtitle">点击卡片开始浏览</string>
     <string name="photo_hint">每组 %1$d 张 · %2$s</string>
+    <string name="crash_report_title">上次运行崩溃了</string>
+    <string name="crash_report_copy">复制</string>
+    <string name="crash_report_copied">已复制崩溃日志</string>
+    <string name="crash_report_close">关闭</string>
     <string name="album_default">系统相册</string>
     <string name="album_unknown">未知相册</string>
     <string name="album_picker_title">选择相册</string>
