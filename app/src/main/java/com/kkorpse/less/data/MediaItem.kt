@@ -13,6 +13,8 @@ data class MediaItem(
     val width: Int,
     val height: Int,
     val sizeBytes: Long,
+    /** MediaStore 里的 RELATIVE_PATH，用于移动到收藏目录 / 移回原目录。 */
+    val relativePath: String? = null,
     /** MediaStore 中的 IS_FAVORITE 值，只有 id != 0 的媒体才有意义。 */
     val isFavorite: Boolean = false
 )

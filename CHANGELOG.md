@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.20 — 2026-11-14
+
+- 收藏改为「移动到相册」：收藏照片/视频时把它移到 `Pictures/Less/Favorites`，系统相册会出现 Favorites 相册；取消收藏移回原目录（映射存在 `favorite_paths`，丢失时退回 `Pictures/Less/`）。
+- 移动需要写入授权：先直接 update，失败再 `createWriteRequest` 批量申请一次；授权通常长期有效，日常点爱心不再弹窗。
+- `Pictures/Less/Favorites` 从普通浏览中排除，只出现在收藏页，避免重复。
+- 照片与视频都适用；Photo Picker 选中的内容仍只保存在 Less 本地。
+
 ## 2.2.19 — 2026-11-14
 
 - 收藏结论落地：设备实测 `markIsFavoriteStatus` / `createFavoriteRequest` 都能把 `IS_FAVORITE` 写成 1 并回读确认，重启相册后仍不显示，判定为 ColorOS 相册不消费该字段（其收藏夹使用自己的数据）。

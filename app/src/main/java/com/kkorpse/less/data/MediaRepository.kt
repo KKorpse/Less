@@ -6,6 +6,7 @@ import android.net.Uri
 import android.os.Build
 import android.provider.MediaStore
 import android.provider.OpenableColumns
+import com.kkorpse.less.data.FolderFavorites
 import com.kkorpse.less.prefs.BrowseStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -16,10 +17,11 @@ class MediaRepository(
     private val favorites: BrowseStore? = null
 ) {
 
-    suspend fun loadLibrary(): Result<List<MediaItem>> = withContext(Dispatchers.IO) {
+    suspend fun loadLibrary(includeFavorites: Boolean = false): Result<List<MediaItem>> =
+        withContext(Dispatchers.IO) {
         try {
-            val images = queryImages()
-            val videos = queryVideos()
+            val images = queryImages(includeFavorites = includeFavorites)
+            val videos = queryVideos(includeFavorites = includeFavorites)
             val items = (images + videos).sortedWith(
                 compareByDescending<MediaItem> { it.dateMillis }
                     .thenByDescending { it.id }
@@ -32,10 +34,14 @@ class MediaRepository(
         }
     }
 
-    suspend fun loadPhotos(bucketId: String? = null): Result<List<MediaItem>> =
+    suspend fun loadPhotos(
+        bucketId: String? = null,
+        includeFavorites: Boolean = false
+    ): Result<List<MediaItem>> =
         withContext(Dispatchers.IO) {
             try {
-                val photos = queryImages(bucketId).sortedByDescending { it.dateMillis }
+                val photos = queryImages(bucketId, includeFavorites)
+                    .sortedByDescending { it.dateMillis }
                 Result.success(syncFavorites(photos))
             } catch (e: CancellationException) {
                 throw e
@@ -105,27 +111,10 @@ class MediaRepository(
         }
     }
 
-    private fun queryImages(bucketId: String? = null): List<MediaItem> {
-        val projection = arrayOf(
-            MediaStore.MediaColumns._ID,
-            MediaStore.MediaColumns.DISPLAY_NAME,
-            MediaStore.MediaColumns.MIME_TYPE,
-            MediaStore.MediaColumns.DATE_TAKEN,
-            MediaStore.MediaColumns.DATE_MODIFIED,
-            MediaStore.MediaColumns.WIDTH,
-            MediaStore.MediaColumns.HEIGHT,
-            MediaStore.MediaColumns.SIZE
-        ) + favoriteProjection()
-        return context.contentResolver.query(
-            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
-            projection,
-            baseSelection(bucketId),
-            bucketArgs(bucketId),
-            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
-        )?.use { cursor -> readMediaStoreRows(cursor, isVideo = false) } ?: emptyList()
-    }
-
-    private fun queryVideos(): List<MediaItem> {
+    private fun queryImages(
+        bucketId: String? = null,
+        includeFavorites: Boolean = false
+    ): List<MediaItem> {
         val projection = arrayOf(
             MediaStore.MediaColumns._ID,
             MediaStore.MediaColumns.DISPLAY_NAME,
@@ -135,22 +124,52 @@ class MediaRepository(
             MediaStore.MediaColumns.WIDTH,
             MediaStore.MediaColumns.HEIGHT,
             MediaStore.MediaColumns.SIZE,
-            MediaStore.MediaColumns.DURATION
+            MediaStore.MediaColumns.RELATIVE_PATH
+        ) + favoriteProjection()
+        return context.contentResolver.query(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            projection,
+            baseSelection(bucketId, includeFavorites),
+            bucketArgs(bucketId),
+            "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
+        )?.use { cursor -> readMediaStoreRows(cursor, isVideo = false) } ?: emptyList()
+    }
+
+    private fun queryVideos(includeFavorites: Boolean = false): List<MediaItem> {
+        val projection = arrayOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.DATE_TAKEN,
+            MediaStore.MediaColumns.DATE_MODIFIED,
+            MediaStore.MediaColumns.WIDTH,
+            MediaStore.MediaColumns.HEIGHT,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DURATION,
+            MediaStore.MediaColumns.RELATIVE_PATH
         ) + favoriteProjection()
         return context.contentResolver.query(
             MediaStore.Video.Media.EXTERNAL_CONTENT_URI,
             projection,
-            baseSelection(),
+            baseSelection(includeFavorites = includeFavorites),
             null,
             "${MediaStore.MediaColumns.DATE_MODIFIED} DESC"
         )?.use { cursor -> readMediaStoreRows(cursor, isVideo = true) } ?: emptyList()
     }
 
-    private fun baseSelection(bucketId: String? = null): String {
+    private fun baseSelection(
+        bucketId: String? = null,
+        includeFavorites: Boolean = false
+    ): String {
         val clauses = mutableListOf("${MediaStore.MediaColumns.SIZE} > 0")
         clauses += "${MediaStore.MediaColumns.IS_PENDING} = 0"
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             clauses += "${MediaStore.MediaColumns.IS_TRASHED} = 0"
+        }
+        if (!includeFavorites) {
+            // 收藏目录里的媒体只出现在收藏页，不混进普通浏览。
+            clauses += "(${MediaStore.MediaColumns.RELATIVE_PATH} IS NULL OR " +
+                "${MediaStore.MediaColumns.RELATIVE_PATH} NOT LIKE '${FolderFavorites.PATH}%')"
         }
         if (!bucketId.isNullOrBlank()) {
             clauses += "${MediaStore.MediaColumns.BUCKET_ID} = ?"
@@ -178,6 +197,7 @@ class MediaRepository(
         } else {
             -1
         }
+        val pathColumn = cursor.getColumnIndex(MediaStore.MediaColumns.RELATIVE_PATH)
         val favoriteColumn = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             cursor.getColumnIndex(MediaStore.MediaColumns.IS_FAVORITE)
         } else {
@@ -207,6 +227,7 @@ class MediaRepository(
                 width = cursor.getInt(widthColumn),
                 height = cursor.getInt(heightColumn),
                 sizeBytes = cursor.getLong(sizeColumn),
+                relativePath = if (pathColumn >= 0) cursor.getString(pathColumn) else null,
                 isFavorite = favoriteColumn >= 0 &&
                     cursor.getInt(favoriteColumn) == 1
             )

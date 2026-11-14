@@ -2,6 +2,7 @@ package com.kkorpse.less.prefs
 
 import android.content.Context
 import android.net.Uri
+import org.json.JSONObject
 
 /**
  * 浏览记录、收藏和删除次数。全部保存在本机 SharedPreferences 中。
@@ -133,6 +134,32 @@ class BrowseStore(context: Context) {
 
     fun favoriteUris(): Set<String> = favorites.toSet()
 
+    /** 收藏时记录媒体原来的 RELATIVE_PATH，取消收藏时移回去。 */
+    fun rememberFavoritePath(uri: Uri, path: String?) {
+        if (path.isNullOrBlank()) return
+        val json = runCatching {
+            JSONObject(prefs.getString(KEY_FAVORITE_PATHS, "{}") ?: "{}")
+        }.getOrElse { JSONObject() }
+        json.put(uri.toString(), path)
+        prefs.edit().putString(KEY_FAVORITE_PATHS, json.toString()).apply()
+    }
+
+    fun favoriteOriginalPath(uri: Uri): String? {
+        val json = runCatching {
+            JSONObject(prefs.getString(KEY_FAVORITE_PATHS, "{}") ?: "{}")
+        }.getOrNull() ?: return null
+        return json.optString(uri.toString()).takeIf { it.isNotBlank() }
+    }
+
+    fun forgetFavoritePath(uri: Uri) {
+        val json = runCatching {
+            JSONObject(prefs.getString(KEY_FAVORITE_PATHS, "{}") ?: "{}")
+        }.getOrNull() ?: return
+        if (!json.has(uri.toString())) return
+        json.remove(uri.toString())
+        prefs.edit().putString(KEY_FAVORITE_PATHS, json.toString()).apply()
+    }
+
     /**
      * 当前这一组照片的 URI（保持顺序）。有它之后，退出照片专注或重开 App
      * 都还能回到同一组，不会重新随机一次。
@@ -190,5 +217,6 @@ class BrowseStore(context: Context) {
         private const val KEY_CURSOR = "sequential_cursor"
         private const val KEY_CURRENT_GROUP = "current_group"
         private const val KEY_VIDEO_CURSOR = "video_cursor"
+        private const val KEY_FAVORITE_PATHS = "favorite_paths"
     }
 }

@@ -114,7 +114,7 @@ class FavoritesActivity : AppCompatActivity() {
             val app = application as LessApp
             val favorites = app.browseStore.favoriteUris()
             val items = MediaRepository(application, app.browseStore)
-                .loadLibrary()
+                .loadLibrary(includeFavorites = true)
                 .getOrElse { emptyList() }
                 .filter { it.uri.toString() in favorites }
 
