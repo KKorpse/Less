@@ -55,6 +55,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var lastDeleteItems: List<MediaItem> = emptyList()
     private var exitingView: View? = null
     private var swipeOffsetY = 0f
+    private var swipingView: View? = null
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
     private val colorResolver = PhotoColorResolver()
@@ -208,20 +209,24 @@ class PhotoFocusActivity : AppCompatActivity() {
                 actionState: Int,
                 isCurrentlyActive: Boolean
             ) {
-                // 已经在播退场动画的卡片，不要再被重置成不透明。
-                if (viewHolder.itemView === exitingView) return
-                val card = viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)
+                val itemView = viewHolder.itemView
+                // 已经在播退场动画的卡片，不要再被重置。
+                if (itemView === exitingView) return
+                val card = itemView.findViewById<FocusCardLayout>(R.id.card)
                 if (card != null) {
                     if (isCurrentlyActive && dY < 0f) {
+                        swipingView = itemView
                         swipeOffsetY = dY
                         // 以「触发删除的距离」为 1，红光与缩小同步渐变。
-                        val progress = (-dY / (viewHolder.itemView.height * SWIPE_THRESHOLD))
+                        val progress = (-dY / (itemView.height * SWIPE_THRESHOLD))
                             .coerceIn(0f, 1f)
                         card.scaleX = 1f - 0.10f * progress
                         card.scaleY = 1f - 0.10f * progress
                         card.alpha = 1f - 0.45f * progress
                         binding.swipeGlow.alpha = progress * 0.9f
-                    } else {
+                    } else if (itemView !== swipingView) {
+                        // 只有真正结束了手势（clearView 会清空 swipingView）才复位，
+                        // 否则松手这一帧会把卡片弹回 1x，看起来就是抖动放大。
                         card.scaleX = 1f
                         card.scaleY = 1f
                         card.alpha = 1f
@@ -245,6 +250,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val view = viewHolder.itemView
                 val card = view.findViewById<FocusCardLayout>(R.id.card)
                 exitingView = view
+                swipingView = null
                 binding.swipeGlow.animate().alpha(0f).setDuration(240L).start()
 
                 if (card == null) {
@@ -252,15 +258,9 @@ class PhotoFocusActivity : AppCompatActivity() {
                     return
                 }
 
-                // ItemTouchHelper 在 onSwiped 之后会把 itemView 的 translation 归零，
-                // 所以退场动画必须作用在 card 上，否则会出现「飞出去→回原地→再飞出去」。
-                val startOffset = swipeOffsetY
-                val startProgress = (-startOffset /
-                    (view.height.coerceAtLeast(1) * SWIPE_THRESHOLD)).coerceIn(0f, 1f)
-                card.translationY = startOffset
-                card.scaleX = 1f - 0.10f * startProgress
-                card.scaleY = 1f - 0.10f * startProgress
-                card.alpha = 1f
+                // 直接把当前拖动时的缩放/透明度作为动画起点，避免松手瞬间跳回 1x。
+                // ItemTouchHelper 会把 itemView 的 translation 归零，用 card 的位移接住。
+                card.translationY = swipeOffsetY
 
                 card.animate()
                     .translationY(-view.height.toFloat() * 1.05f)
@@ -287,6 +287,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 viewHolder: RecyclerView.ViewHolder
             ) {
                 binding.swipeGlow.alpha = 0f
+                if (viewHolder.itemView !== exitingView) swipingView = null
                 // 正在播放退场动画的卡片不要被 ItemTouchHelper 重置回原状。
                 if (viewHolder.itemView === exitingView) return
                 viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)?.let {

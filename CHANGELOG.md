@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.21 — 2026-11-14
+
+- 删除动画松手抖动修复：`ItemTouchHelper` 在手指抬起时会再回调一次 `onChildDraw(isCurrentlyActive=false)`，把卡片的 scale 复位成 1、alpha 复位成 1，于是出现「缩小 → 突然放大 → 再飞走」。现在用 `swipingView` 标记正在滑动的那张卡，松手这一帧不做复位；退场动画直接以当前的 scale/alpha 为起点，只把位移接到 `swipeOffsetY`。
+
 ## 2.2.20 — 2026-11-14
 
 - 收藏改为「移动到相册」：收藏照片/视频时把它移到 `Pictures/Less/Favorites`，系统相册会出现 Favorites 相册；取消收藏移回原目录（映射存在 `favorite_paths`，丢失时退回 `Pictures/Less/`）。
