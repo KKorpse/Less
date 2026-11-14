@@ -53,6 +53,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private lateinit var batchController: BatchTrashController
     private var lastDeleteItems: List<MediaItem> = emptyList()
     private var exitingView: View? = null
+    private var swipeOffsetY = 0f
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
     private val colorResolver = PhotoColorResolver()
@@ -120,6 +121,17 @@ class PhotoFocusActivity : AppCompatActivity() {
         observePages()
         updateCurrent()
         maybeRequestLocationPermission()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        // 只记录从首页进入的组；收藏页进来的会话不覆盖首页进度。
+        if (!PhotoFocusSession.autoNextGroup) return
+        val app = application as LessApp
+        val photos = viewModel.pages.value.filterIsInstance<FocusPage.Photo>()
+        val key = photos.firstOrNull()?.item?.uri?.toString() ?: return
+        app.preferences.photoGroupKey = key
+        app.preferences.photoGroupIndex = viewModel.currentIndex
     }
 
     override fun onDestroy() {
@@ -200,6 +212,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val card = viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)
                 if (card != null) {
                     if (isCurrentlyActive && dY < 0f) {
+                        swipeOffsetY = dY
                         // 以「触发删除的距离」为 1，红光与缩小同步渐变。
                         val progress = (-dY / (viewHolder.itemView.height * SWIPE_THRESHOLD))
                             .coerceIn(0f, 1f)
@@ -230,17 +243,30 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
                 val view = viewHolder.itemView
                 exitingView = view
+                val startOffset = swipeOffsetY
+                val startProgress = (-startOffset /
+                    (view.height.coerceAtLeast(1) * SWIPE_THRESHOLD)).coerceIn(0f, 1f)
+                // 卡片自身的拖动缩放交还给 itemView 统一控制，避免两套 transform 打架。
+                view.findViewById<FocusCardLayout>(R.id.card)?.let {
+                    it.scaleX = 1f
+                    it.scaleY = 1f
+                    it.alpha = 1f
+                }
                 // 红光跟着一起收掉，和卡片的退场同步。
                 binding.swipeGlow.animate().alpha(0f).setDuration(240L).start()
-                // 卡片一边缩小一边向上方远端飞走，动画播完再从列表里移除。
+                // 从手指抬起时的位置/缩放继续，一边缩小一边飞出屏幕顶部。
                 view.post {
+                    view.translationY = startOffset
+                    view.scaleX = 1f - 0.10f * startProgress
+                    view.scaleY = 1f - 0.10f * startProgress
+                    view.alpha = 1f
                     view.animate()
-                        .translationY(-view.height * 0.92f)
-                        .scaleX(0.55f)
-                        .scaleY(0.55f)
+                        .translationY(-view.height.toFloat() * 1.05f)
+                        .scaleX(0.5f)
+                        .scaleY(0.5f)
                         .alpha(0f)
-                        .setDuration(260L)
-                        .setInterpolator(DecelerateInterpolator(1.8f))
+                        .setDuration(300L)
+                        .setInterpolator(DecelerateInterpolator(1.4f))
                         .withEndAction {
                             if (exitingView === view) exitingView = null
                             markForDeletion(position, page)

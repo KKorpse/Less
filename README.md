@@ -26,6 +26,7 @@
 
 ### 照片专注
 
+- 同一组照片会记住看到第几张，退出后再进来从上次的位置继续
 - 左右滑动切换；上滑标记为待删除（滑到卡片高度 8% 即触发，拖动时照片轻微缩小、屏幕顶部亮起红色微光，松手后照片缩小 55%、向上飞走并淡出（260ms））
 - 上滑时卡片缩小、淡出、向上消失，不立即打扰系统
 - 可以连续标记多张；整组看完后进入汇总页
@@ -104,7 +105,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.2.14（versionCode 23） |
+| 当前版本 | 2.2.15（versionCode 24） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -127,7 +128,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.2.14-debug.apk
+app/build/outputs/apk/debug/Less-v2.2.15-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -156,13 +157,14 @@ dist/Less-v2.2.11-debug.apk
 dist/Less-v2.2.12-debug.apk
 dist/Less-v2.2.13-debug.apk
 dist/Less-v2.2.14-debug.apk
+dist/Less-v2.2.15-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.14-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.15-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -182,7 +184,7 @@ dist/SHA256SUMS.txt
 - 验证签名：
 
   ```bash
-  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.2.14-debug.apk
+  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.2.15-debug.apk
   ```
 
 - **一次性切换**：2.2.3 及更早的 `dist/` 包是原作者机器的 debug keystore 签的，与统一签名不一致，第一次装 2.2.4 必须先卸载旧包（卸载前可按下面的命令备份应用数据）。
@@ -198,7 +200,7 @@ adb exec-out run-as $PKG cat shared_prefs/less_browse.xml > less_browse.xml
 adb exec-out run-as $PKG cat shared_prefs/less_settings.xml > less_settings.xml
 
 adb uninstall $PKG
-adb install -r dist/Less-v2.2.14-debug.apk
+adb install -r dist/Less-v2.2.15-debug.apk
 
 adb shell am force-stop $PKG
 adb shell run-as $PKG mkdir -p shared_prefs

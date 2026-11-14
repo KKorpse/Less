@@ -442,6 +442,8 @@ class VideoFeedFragment : Fragment() {
         if (trash) {
             viewModel.markBatchDeleted()
             Toast.makeText(requireContext(), R.string.trash_success, Toast.LENGTH_SHORT).show()
+            // 删除完成直接进下一组，和照片一致，不再让用户点第二次。
+            nextGroup()
         } else {
             viewModel.undoBatchDeleted()
             Toast.makeText(requireContext(), R.string.restore_success, Toast.LENGTH_SHORT).show()

@@ -264,8 +264,16 @@ class PhotoHomeFragment : Fragment() {
     private fun openFocus(index: Int) {
         val photos = viewModel.state.value.photos
         if (photos.isEmpty()) return
+        val preferences = (requireActivity().application as LessApp).preferences
+        val groupKey = photos.first().uri.toString()
+        // 同一组照片再次进入时，从上次看到的位置继续。
+        val remembered = if (preferences.photoGroupKey == groupKey) {
+            preferences.photoGroupIndex.coerceIn(photos.indices)
+        } else {
+            index.coerceIn(photos.indices)
+        }
         PhotoFocusSession.items = photos
-        PhotoFocusSession.startIndex = index.coerceIn(photos.indices)
+        PhotoFocusSession.startIndex = remembered
         PhotoFocusSession.canTrash = true
         PhotoFocusSession.autoNextGroup = true
         focusLauncher.launch(Intent(requireContext(), PhotoFocusActivity::class.java))

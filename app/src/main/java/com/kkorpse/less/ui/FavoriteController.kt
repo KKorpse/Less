@@ -32,6 +32,7 @@ class FavoriteController(
 
     private val handler = Handler(Looper.getMainLooper())
     private var pending: Request? = null
+    private var pendingMode: MediaFavorites.Mode = MediaFavorites.Mode.FAVORITE
     var isBusy: Boolean = false
         private set
 
@@ -50,6 +51,10 @@ class FavoriteController(
             // 系统确认后回读一次；个别 ROM 写库有延迟，稍等再校验。
             val uris = request.items.map { it.uri }
             handler.postDelayed({
+                if (pendingMode == MediaFavorites.Mode.WRITE) {
+                    // 通用写授权：授权后自己把 IS_FAVORITE 写进去。
+                    MediaFavorites.applyDirect(context.contentResolver, uris, request.favorite)
+                }
                 val applied = MediaFavorites.verify(
                     context.contentResolver,
                     uris,
@@ -74,6 +79,7 @@ class FavoriteController(
 
             is MediaFavorites.Result.NeedsConfirmation -> {
                 pending = Request(items, favorite)
+                pendingMode = result.mode
                 isBusy = true
                 launcher.launch(IntentSenderRequest.Builder(result.intentSender).build())
                 true

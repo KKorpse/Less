@@ -79,6 +79,22 @@ class AppPreferences(context: Context) {
             }.apply()
         }
 
+    /** 照片专注里上次看到的组与位置，用于退出再进来时续看。 */
+    var photoGroupKey: String?
+        get() = prefs.getString(KEY_PHOTO_GROUP_KEY, null)?.takeIf { it.isNotBlank() }
+        set(value) {
+            prefs.edit().apply {
+                if (value.isNullOrBlank()) remove(KEY_PHOTO_GROUP_KEY)
+                else putString(KEY_PHOTO_GROUP_KEY, value)
+            }.apply()
+        }
+
+    var photoGroupIndex: Int
+        get() = prefs.getInt(KEY_PHOTO_GROUP_INDEX, 0)
+        set(value) {
+            prefs.edit().putInt(KEY_PHOTO_GROUP_INDEX, value.coerceAtLeast(0)).apply()
+        }
+
     var locationAsked: Boolean
         get() = prefs.getBoolean(KEY_LOCATION_ASKED, false)
         set(value) {
@@ -96,6 +112,8 @@ class AppPreferences(context: Context) {
         private const val KEY_BROWSE_MODE = "browse_mode"
         private const val KEY_LOCATION_ASKED = "location_asked"
         private const val KEY_VIDEO_GROUP_SIZE = "video_group_size"
+        private const val KEY_PHOTO_GROUP_KEY = "photo_group_key"
+        private const val KEY_PHOTO_GROUP_INDEX = "photo_group_index"
         private const val KEY_PHOTO_BUCKET_ID = "photo_bucket_id"
         private const val KEY_PHOTO_BUCKET_NAME = "photo_bucket_name"
     }

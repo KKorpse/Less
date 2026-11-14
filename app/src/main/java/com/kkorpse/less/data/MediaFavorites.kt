@@ -1,6 +1,7 @@
 package com.kkorpse.less.data
 
 import android.content.ContentResolver
+import android.content.ContentValues
 import android.content.IntentSender
 import android.net.Uri
 import android.os.Build
@@ -24,13 +25,42 @@ object MediaFavorites {
         data object Applied : Result
 
         /** 需要拉起系统确认弹窗，调用方用 [IntentSender] 启动后按结果回调。 */
-        data class NeedsConfirmation(val intentSender: IntentSender) : Result
+        data class NeedsConfirmation(
+            val intentSender: IntentSender,
+            val mode: Mode
+        ) : Result
 
         /** 当前系统或这些 URI 不支持写入系统媒体库，只能保存在 Less 本地。 */
         data object Unsupported : Result
     }
 
+    enum class Mode {
+        /** 系统的“收藏”确认框（createFavoriteRequest）。 */
+        FAVORITE,
+
+        /** 通用的写入授权框（createWriteRequest），授权后自己 update IS_FAVORITE。 */
+        WRITE
+    }
+
     fun isSupported(): Boolean = Build.VERSION.SDK_INT >= Build.VERSION_CODES.R
+
+    /**
+     * 用户已经授权写入后，直接更新 IS_FAVORITE。
+     * 这是 createFavoriteRequest 不可用时的兜底路径。
+     */
+    fun applyDirect(
+        resolver: ContentResolver,
+        uris: List<Uri>,
+        favorite: Boolean
+    ): Boolean {
+        if (!isSupported()) return false
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.IS_FAVORITE, if (favorite) 1 else 0)
+        }
+        return uris.all { uri ->
+            runCatching { resolver.update(uri, values, null, null) >= 0 }.getOrDefault(false)
+        }
+    }
 
     /** 回读媒体库里的收藏位，确认这次写入真的生效。 */
     fun verify(resolver: ContentResolver, uris: List<Uri>, favorite: Boolean): Boolean {
@@ -65,9 +95,17 @@ object MediaFavorites {
             if (verify(resolver, uris, favorite)) return Result.Applied
         }
 
-        return runCatching {
+        val favoriteRequest = runCatching {
             MediaStore.createFavoriteRequest(resolver, uris, favorite)
-        }.map { Result.NeedsConfirmation(it.intentSender) }
+        }.getOrNull()
+        if (favoriteRequest != null) {
+            return Result.NeedsConfirmation(favoriteRequest.intentSender, Mode.FAVORITE)
+        }
+
+        // 部分 ROM 没实现 createFavoriteRequest，退回“申请写权限 + 自己更新 IS_FAVORITE”。
+        return runCatching {
+            MediaStore.createWriteRequest(resolver, uris)
+        }.map { Result.NeedsConfirmation(it.intentSender, Mode.WRITE) }
             .getOrElse { Result.Unsupported }
     }
 }
