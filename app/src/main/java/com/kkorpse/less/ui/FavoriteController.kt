@@ -80,13 +80,10 @@ class FavoriteController(
     fun request(items: List<MediaItem>, favorite: Boolean): Boolean {
         if (items.isEmpty()) return false
         if (isBusy) return true
-        val preferDialog = (context.applicationContext as? com.kkorpse.less.LessApp)
-            ?.preferences?.favoriteUseSystemDialog == true
         return when (val result = MediaFavorites.setFavorite(
             context.contentResolver,
             items,
-            favorite,
-            preferDialog
+            favorite
         )) {
             is MediaFavorites.Result.Applied -> {
                 MediaFavorites.notifyChanged(context, items.map { it.uri })

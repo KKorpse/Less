@@ -48,6 +48,7 @@
     <string name="location_permission_allow">允许</string>
     <string name="location_permission_not_now">暂不</string>
     <string name="photo_info_title">照片信息</string>
+    <string name="photo_info_open_gallery">在系统相册中打开</string>
     <string name="photo_info_desc">照片信息</string>
 
     <string name="review_title">回顾完毕</string>
@@ -113,7 +114,7 @@
     <string name="settings_mode_random">随机</string>
     <string name="settings_mode_sequential">顺序</string>
     <string name="settings_note_section">说明</string>
-    <string name="settings_favorites_note">收藏会写入系统媒体库（MediaStore 的 IS_FAVORITE），系统相册的“收藏”相册若读取该字段就会同步显示；Android 11–15 首次收藏时会弹一次系统确认。首页右上角的心形入口始终可以查看 Less 内的收藏。</string>
+    <string name="settings_favorites_note">收藏会写入系统媒体库的 IS_FAVORITE（已在本机验证写入成功），但 ColorOS 相册的“收藏”相册不读取该字段，只显示它自己收藏的内容；系统相册里收藏的照片会同步显示在 Less 的收藏页。首页右上角的心形入口可以查看 Less 内的全部收藏。</string>
     <string name="settings_delete_note">照片上滑只会标记待删除；本组看完后在汇总页统一确认，再调用系统回收站。视频仍在右侧直接删除/撤回。</string>
     <string name="settings_location_note">照片气泡里的拍摄地址来自照片内置 GPS，首次进入照片浏览时会请求读取照片位置信息。没有 GPS 或无法解析时显示“未记录拍摄地点”或坐标。</string>
     <string name="settings_version">Less %1$s</string>

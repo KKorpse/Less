@@ -1,6 +1,7 @@
 package com.kkorpse.less.ui
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
@@ -438,6 +439,14 @@ class PhotoFocusActivity : AppCompatActivity() {
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.photo_info_title)
             .setMessage(message)
+            .setNeutralButton(R.string.photo_info_open_gallery) { _, _ ->
+                runCatching {
+                    startActivity(
+                        Intent(Intent.ACTION_VIEW, page.item.uri)
+                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    )
+                }
+            }
             .setPositiveButton(android.R.string.ok, null)
             .show()
     }

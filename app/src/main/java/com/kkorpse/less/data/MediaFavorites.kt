@@ -112,23 +112,11 @@ object MediaFavorites {
     fun setFavorite(
         resolver: ContentResolver,
         items: List<MediaItem>,
-        favorite: Boolean,
-        preferSystemDialog: Boolean = false
+        favorite: Boolean
     ): Result {
         if (!isSupported()) return Result.Unsupported
         val uris = items.filter(::isMediaStoreMedia).map { it.uri }
         if (uris.isEmpty()) return Result.Unsupported
-
-        // 排查用：强制走系统确认框，看 ColorOS 是否只认这条路径。
-        if (preferSystemDialog && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-            val dialog = runCatching {
-                MediaStore.createFavoriteRequest(resolver, uris, favorite)
-            }.getOrNull()
-            if (dialog != null) {
-                Diagnostics.recordFavorite("prefer dialog -> createFavoriteRequest")
-                return Result.NeedsConfirmation(dialog.intentSender, Mode.FAVORITE)
-            }
-        }
 
         if (Build.VERSION.SDK_INT >= 36) {
             val callOk = runCatching {
