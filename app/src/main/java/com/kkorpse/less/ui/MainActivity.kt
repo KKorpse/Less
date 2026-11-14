@@ -22,6 +22,7 @@ import androidx.core.view.updatePadding
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.kkorpse.less.Breadcrumbs
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaRepository
@@ -52,7 +53,6 @@ class MainActivity : AppCompatActivity() {
     private var currentTab = Tab.PHOTOS
     private var visibleTab: Tab? = null
     private var permissionPermanentlyDenied = false
-    private var fragmentsAdded = false
     private var launchedFromFavoritesVideo = false
 
     private var photoFragment: PhotoHomeFragment? = null
@@ -101,6 +101,7 @@ class MainActivity : AppCompatActivity() {
         setupInsets()
         setupActions()
         setupBack()
+        Breadcrumbs.step(this, "MainActivity.onCreate tab=${currentTab.name}")
         showPendingCrash()
         render()
     }
@@ -158,6 +159,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun render() {
+        Breadcrumbs.step(this, "render start")
         val mode = MediaAccess.mode(this)
         val granted = mode != AccessMode.NONE
         if (granted) permissionPermanentlyDenied = false
@@ -166,9 +168,9 @@ class MainActivity : AppCompatActivity() {
         binding.tabContainer.isVisible = granted
         binding.bottomNav.isVisible = granted
         binding.loading.isVisible = false
+        Breadcrumbs.step(this, "render granted=$granted tab=${currentTab.name}")
 
         if (granted) {
-            ensureFragments()
             showTab(currentTab, force = visibleTab == null)
             if (currentTab == Tab.VIDEOS) {
                 videoFragment?.resumeAfterPermission()
@@ -179,61 +181,53 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun ensureFragments() {
-        if (fragmentsAdded) return
-        try {
-            addFragments()
-        } catch (t: Throwable) {
-            // 页面创建阶段的异常先接住，把堆栈弹出来，避免直接闪退。
-            showCrash(t)
-        }
+    private fun tagFor(tab: Tab): String = when (tab) {
+        Tab.PHOTOS -> TAG_PHOTOS
+        Tab.VIDEOS -> TAG_VIDEOS
+        Tab.STATS -> TAG_STATS
     }
 
-    private fun addFragments() {
+    /**
+     * 只创建当前 tab 的 Fragment。视频页会初始化 ExoPlayer，尽量推迟到真正切过去时再建，
+     * 减少启动阶段的崩溃面。
+     */
+    private fun ensureFragment(tab: Tab): Fragment? {
         val fm = supportFragmentManager
-        photoFragment = fm.findFragmentByTag(TAG_PHOTOS) as? PhotoHomeFragment
-            ?: PhotoHomeFragment()
-        videoFragment = fm.findFragmentByTag(TAG_VIDEOS) as? VideoFeedFragment
-            ?: VideoFeedFragment()
-        statsFragment = fm.findFragmentByTag(TAG_STATS) as? StatsFragment
-            ?: StatsFragment()
-
-        val tx = fm.beginTransaction()
-        if (photoFragment?.isAdded != true) {
-            tx.add(R.id.tabContainer, photoFragment!!, TAG_PHOTOS).hide(photoFragment!!)
+        val tag = tagFor(tab)
+        fm.findFragmentByTag(tag)?.let { existing ->
+            when (tab) {
+                Tab.PHOTOS -> photoFragment = existing as? PhotoHomeFragment
+                Tab.VIDEOS -> videoFragment = existing as? VideoFeedFragment
+                Tab.STATS -> statsFragment = existing as? StatsFragment
+            }
+            return existing
         }
-        if (videoFragment?.isAdded != true) {
-            tx.add(R.id.tabContainer, videoFragment!!, TAG_VIDEOS).hide(videoFragment!!)
+        Breadcrumbs.step(this, "create fragment ${tab.name}")
+        val fragment: Fragment = when (tab) {
+            Tab.PHOTOS -> PhotoHomeFragment().also { photoFragment = it }
+            Tab.VIDEOS -> VideoFeedFragment().also { videoFragment = it }
+            Tab.STATS -> StatsFragment().also { statsFragment = it }
         }
-        if (statsFragment?.isAdded != true) {
-            tx.add(R.id.tabContainer, statsFragment!!, TAG_STATS).hide(statsFragment!!)
+        return runCatching {
+            fm.beginTransaction().add(R.id.tabContainer, fragment, tag).hide(fragment)
+                .commitNow()
+            Breadcrumbs.step(this, "fragment ${tab.name} created")
+            fragment
+        }.getOrElse { t ->
+            Breadcrumbs.step(this, "fragment ${tab.name} failed: ${t.javaClass.simpleName}")
+            showCrash(t)
+            null
         }
-        tx.commitNow()
-        fragmentsAdded = true
-
-        // 恢复场景下 FragmentManager 可能已经显示了某个 tab，先统一隐藏。
-        val hide = fm.beginTransaction()
-        photoFragment?.let { hide.hide(it) }
-        videoFragment?.let { hide.hide(it) }
-        statsFragment?.let { hide.hide(it) }
-        hide.commitNow()
     }
 
     private fun selectTab(tab: Tab) {
         currentTab = tab
         if (MediaAccess.mode(this) == AccessMode.NONE) return
-        ensureFragments()
         showTab(tab, force = false)
     }
 
     private fun showTab(tab: Tab, force: Boolean) {
-        if (!fragmentsAdded) return
-        val target: Fragment = when (tab) {
-            Tab.PHOTOS -> photoFragment
-            Tab.VIDEOS -> videoFragment
-            Tab.STATS -> statsFragment
-        } ?: return
-
+        val target = ensureFragment(tab) ?: return
         updateNavSelection(tab)
 
         if (!force && visibleTab == tab && target.isVisible) {
@@ -263,6 +257,7 @@ class MainActivity : AppCompatActivity() {
             .alpha(0f)
             .setDuration(100L)
             .withEndAction {
+
                 commitTab()
                 binding.tabContainer.alpha = 0f
                 binding.tabContainer.animate()
@@ -341,7 +336,7 @@ class MainActivity : AppCompatActivity() {
 
     /** 上次崩溃时留下的堆栈，启动后直接展示，便于用户反馈。 */
     private fun showCrash(throwable: Throwable) {
-        val text = android.util.Log.getStackTraceString(throwable)
+        val text = Breadcrumbs.text() + "\n" + android.util.Log.getStackTraceString(throwable)
         runCatching {
             java.io.File(filesDir, LessApp.CRASH_FILE).writeText(text)
         }
@@ -363,6 +358,7 @@ class MainActivity : AppCompatActivity() {
         val text = runCatching { file.readText() }.getOrNull().orEmpty()
         runCatching { file.delete() }
         if (text.isBlank()) return
+        Breadcrumbs.step(this, "show pending crash")
 
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.crash_report_title)

@@ -20,6 +20,7 @@ class LessApp : Application(), SingletonImageLoader.Factory {
     override fun onCreate() {
         super.onCreate()
         installCrashHandler()
+        Breadcrumbs.step(this, "app.onCreate")
         preferences = AppPreferences(this)
         browseStore = BrowseStore(this)
     }
@@ -47,8 +48,12 @@ class LessApp : Application(), SingletonImageLoader.Factory {
                     appendLine("time: ${Date()}")
                     appendLine("version: $version")
                     appendLine("thread: ${thread.name}")
+                    appendLine("--- breadcrumbs ---")
+                    appendLine(Breadcrumbs.text())
+                    appendLine("--- stack ---")
                     appendLine(android.util.Log.getStackTraceString(throwable))
                 }
+                Breadcrumbs.flushSync(this@LessApp)
                 File(filesDir, CRASH_FILE).writeText(text)
                 getExternalFilesDir("logs")?.mkdirs()
                 getExternalFilesDir("logs")?.let { File(it, CRASH_FILE).writeText(text) }

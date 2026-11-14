@@ -23,6 +23,7 @@ import coil3.request.crossfade
 import coil3.request.error
 import coil3.request.placeholder
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.kkorpse.less.Breadcrumbs
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaBucket
@@ -179,6 +180,7 @@ class PhotoHomeFragment : Fragment() {
     }
 
     private fun render(state: PhotoHomeState) {
+        Breadcrumbs.step(requireContext(), "photo render photos=${state.photos.size}")
         val preferences = (requireActivity().application as LessApp).preferences
         val albumLabel = preferences.photoBucketName?.takeIf { it.isNotBlank() }
             ?: getString(R.string.album_default)
@@ -218,9 +220,11 @@ class PhotoHomeFragment : Fragment() {
             size(256, 256)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            binding.background.setRenderEffect(
-                RenderEffect.createBlurEffect(42f, 42f, Shader.TileMode.CLAMP)
-            )
+            runCatching {
+                binding.background.setRenderEffect(
+                    RenderEffect.createBlurEffect(42f, 42f, Shader.TileMode.CLAMP)
+                )
+            }
         }
 
         binding.cardCenter.isVisible = true
