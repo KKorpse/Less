@@ -58,7 +58,7 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
         busy = true
         emit()
         viewModelScope.launch {
-            groupBuilder.newGroup()
+            groupBuilder.advanceGroup()
                 .onSuccess { photos ->
                     if (photos.isEmpty()) {
                         loadingNext = false

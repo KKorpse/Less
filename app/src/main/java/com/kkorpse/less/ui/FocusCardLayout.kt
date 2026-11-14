@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Path
 import android.util.AttributeSet
+import android.view.MotionEvent
 import android.widget.FrameLayout
 import com.github.chrisbanes.photoview.PhotoView
 
@@ -23,6 +24,9 @@ class FocusCardLayout @JvmOverloads constructor(
 
     private val clipPath = Path()
     private val cornerRadius = 16f * resources.displayMetrics.density
+
+    /** 双指按下期间不允许 RecyclerView 抢走手势，否则捏合会被当成横向翻页。 */
+    private var pinching = false
 
     override fun dispatchDraw(canvas: Canvas) {
         val photo = photoView
@@ -59,8 +63,20 @@ class FocusCardLayout @JvmOverloads constructor(
         canvas.restoreToCount(save)
     }
 
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_POINTER_DOWN -> pinching = true
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> pinching = false
+            else -> Unit
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
     override fun requestDisallowInterceptTouchEvent(disallowIntercept: Boolean) {
         val zoomed = (photoView?.scale ?: 1f) > 1.01f
-        super.requestDisallowInterceptTouchEvent(if (zoomed) disallowIntercept else false)
+        // 缩放中或双指操作时把事件留给 PhotoView；1x 单指时交还 RecyclerView 翻页。
+        super.requestDisallowInterceptTouchEvent(
+            if (zoomed || pinching) disallowIntercept else false
+        )
     }
 }

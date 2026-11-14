@@ -37,12 +37,17 @@ class PhotoHomeViewModel(application: Application) : AndroidViewModel(applicatio
         load()
     }
 
+    /**
+     * @param force true 表示重新切一组（改了每组数量/浏览模式/相册），
+     *              false 表示优先复用上次那一组，不重新随机。
+     */
     fun load(force: Boolean = false) {
         if (!force && job?.isActive == true) return
         job?.cancel()
         job = viewModelScope.launch {
             _state.value = _state.value.copy(loading = true, error = null)
-            builder.newGroup()
+            val result = if (force) builder.advanceGroup() else builder.currentOrNewGroup()
+            result
                 .onSuccess { photos ->
                     _state.value = PhotoHomeState(loading = false, photos = photos)
                 }
@@ -55,7 +60,5 @@ class PhotoHomeViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
-    fun nextGroup() {
-        load(force = true)
-    }
+    fun reuseGroup() = load(force = false)
 }

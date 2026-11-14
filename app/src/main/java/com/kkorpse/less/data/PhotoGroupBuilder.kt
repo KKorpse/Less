@@ -10,11 +10,38 @@ class PhotoGroupBuilder(
     private val store: BrowseStore
 ) {
 
-    suspend fun newGroup(): Result<List<MediaItem>> {
+    /**
+     * 取当前这一组：如果上一次的组还能用（照片还在、仍属于当前相册），直接复用，
+     * 不重新随机；否则按设置切一组新的并记下来。
+     */
+    suspend fun currentOrNewGroup(): Result<List<MediaItem>> {
         // 用户选的相册（文件夹）优先，没选就是系统相册全部照片。
         return repository.loadPhotos(preferences.photoBucketId).map { photos ->
-            selectGroup(photos, preferences.groupSize, preferences.browseMode)
+            restoreGroup(photos) ?: createGroup(photos)
         }
+    }
+
+    /** 明确进入下一组：重新切一组并覆盖记录。 */
+    suspend fun advanceGroup(): Result<List<MediaItem>> {
+        return repository.loadPhotos(preferences.photoBucketId).map { photos ->
+            createGroup(photos)
+        }
+    }
+
+    private fun restoreGroup(photos: List<MediaItem>): List<MediaItem>? {
+        val saved = store.currentGroupUris()
+        if (saved.isEmpty()) return null
+        val byUri = photos.associateBy { it.uri.toString() }
+        val restored = saved.mapNotNull { byUri[it] }
+        // 组里大部分照片被删掉/换相册了就重新切一组。
+        val minSize = minOf(preferences.groupSize, 2)
+        return if (restored.size >= minSize) restored else null
+    }
+
+    private fun createGroup(photos: List<MediaItem>): List<MediaItem> {
+        val group = selectGroup(photos, preferences.groupSize, preferences.browseMode)
+        store.setCurrentGroupUris(group.map { it.uri.toString() })
+        return group
     }
 
     private fun selectGroup(

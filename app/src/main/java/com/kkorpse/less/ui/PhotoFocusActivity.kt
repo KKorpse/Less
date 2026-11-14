@@ -178,7 +178,11 @@ class PhotoFocusActivity : AppCompatActivity() {
                 markForDeletion(position, page)
             }
 
-            override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = 0.24f
+            // 上滑很短一段就算删除（默认 0.24 太高，需要滑很长）。
+            override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float = 0.06f
+
+            override fun getSwipeEscapeVelocity(defaultValue: Float): Float =
+                defaultValue.coerceAtMost(600f)
 
             override fun onChildDraw(
                 canvas: android.graphics.Canvas,
@@ -192,7 +196,8 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val card = viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)
                 if (card != null) {
                     if (isCurrentlyActive && dY < 0f) {
-                        val progress = (-dY / viewHolder.itemView.height.coerceAtLeast(1))
+                        // 阈值只有 6%，动画进度用 30% 高度做归一化，短距离也能看出缩小淡出。
+                        val progress = (-dY / (viewHolder.itemView.height * 0.3f))
                             .coerceIn(0f, 1f)
                         card.scaleX = 1f - 0.18f * progress
                         card.scaleY = 1f - 0.18f * progress

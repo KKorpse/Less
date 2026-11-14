@@ -46,7 +46,8 @@ class PhotoHomeFragment : Fragment() {
     private val focusLauncher = registerForActivityResult(
         ActivityResultContracts.StartActivityForResult()
     ) {
-        viewModel.nextGroup()
+        // 从照片专注返回：显示刚才那一组（专注里真的翻到下一组时，当前组记录已经更新）。
+        viewModel.reuseGroup()
     }
 
     override fun onCreateView(
