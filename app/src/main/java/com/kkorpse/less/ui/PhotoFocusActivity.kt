@@ -37,6 +37,8 @@ import com.kkorpse.less.util.Format
 import com.kkorpse.less.util.PhotoColorResolver
 import com.kkorpse.less.util.PhotoLocationResolver
 import com.kkorpse.less.util.dp
+import coil3.SingletonImageLoader
+import coil3.request.ImageRequest
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
@@ -58,6 +60,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var exitingView: View? = null
     private var swipeOffsetY = 0f
     private var swipingView: View? = null
+    private var lastPreloadPosition = -1
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
     private val colorResolver = PhotoColorResolver()
@@ -103,7 +106,7 @@ class PhotoFocusActivity : AppCompatActivity() {
         binding.pager.adapter = adapter
         binding.pager.itemAnimator = null
         binding.pager.setHasFixedSize(true)
-        binding.pager.setItemViewCacheSize(2)
+        binding.pager.setItemViewCacheSize(3)
         PagerSnapHelper().attachToRecyclerView(binding.pager)
 
         WindowCompat.getInsetsController(window, binding.root).apply {
@@ -171,6 +174,25 @@ class PhotoFocusActivity : AppCompatActivity() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                     updateCurrent()
+                }
+            }
+
+            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                // 翻页过程中：当前页滑走、相邻页从下方渐显，形成中途状态。
+                val center = recyclerView.width / 2f
+                for (index in 0 until recyclerView.childCount) {
+                    val child = recyclerView.getChildAt(index)
+                    if (child === exitingView || child === swipingView) continue
+                    val card = child.findViewById<FocusCardLayout>(R.id.card) ?: continue
+                    val childCenter = (child.left + child.right) / 2f
+                    val offset = ((childCenter - center) / recyclerView.width)
+                        .coerceIn(-1f, 1f)
+                    val away = kotlin.math.abs(offset)
+                    card.alpha = 1f - 0.45f * away
+                    card.translationY = dp(26).toFloat() * away
+                    val scale = 1f - 0.04f * away
+                    card.scaleX = scale
+                    card.scaleY = scale
                 }
             }
         })
@@ -253,6 +275,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val card = view.findViewById<FocusCardLayout>(R.id.card)
                 exitingView = view
                 swipingView = null
+                fadeInNeighbour(position)
                 binding.swipeGlow.animate().alpha(0f).setDuration(240L).start()
 
                 if (card == null) {
@@ -382,9 +405,48 @@ class PhotoFocusActivity : AppCompatActivity() {
         viewModel.currentIndex = position
         val page = adapter.currentList.getOrNull(position)
         updateChrome(page)
+        if (position != lastPreloadPosition) {
+            lastPreloadPosition = position
+            preloadAround(position)
+        }
         if (page is FocusPage.Photo) {
             (application as LessApp).browseStore.markViewed(page.item.uri, false)
         }
+    }
+
+    /** 预取前后各一张，翻过去时直接命中缓存，不再等解码。 */
+    private fun preloadAround(position: Int) {
+        val loader = SingletonImageLoader.get(this)
+        listOf(position + 1, position - 1).forEach { index ->
+            val page = adapter.currentList.getOrNull(index) as? FocusPage.Photo ?: return@forEach
+            runCatching {
+                loader.enqueue(
+                    ImageRequest.Builder(this)
+                        .data(page.item.uri)
+                        .size(1600)
+                        .build()
+                )
+            }
+        }
+    }
+
+    /** 删除时让下一张同时从下方渐显，避免出现一帧空档。 */
+    private fun fadeInNeighbour(position: Int) {
+        val holder = binding.pager.findViewHolderForAdapterPosition(position + 1) ?: return
+        val card = holder.itemView.findViewById<FocusCardLayout>(R.id.card) ?: return
+        card.alpha = 0.35f
+        card.translationY = dp(26).toFloat()
+        val scale = 0.96f
+        card.scaleX = scale
+        card.scaleY = scale
+        card.animate()
+            .alpha(1f)
+            .translationY(0f)
+            .scaleX(1f)
+            .scaleY(1f)
+            .setDuration(260L)
+            .setInterpolator(DecelerateInterpolator())
+            .start()
     }
 
     private fun updateChrome(page: FocusPage?) {
