@@ -300,9 +300,15 @@ class PhotoFocusActivity : AppCompatActivity() {
 
                 // 先把当前这张拍成快照，盖在最上层飞走；真正的列表立刻更新，
                 // 让下一张就位，再从下方浮现——这样删除不会有“等一下才划过来”的停顿。
+                // 降采样一半再拍快照：260ms 的动画看不出差别，但能显著降低 OOM 风险。
                 val snapshot = runCatching {
-                    Bitmap.createBitmap(card.width, card.height, Bitmap.Config.ARGB_8888).also {
-                        card.draw(Canvas(it))
+                    val scale = 0.5f
+                    val width = (card.width * scale).toInt().coerceAtLeast(1)
+                    val height = (card.height * scale).toInt().coerceAtLeast(1)
+                    Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
+                        val canvas = Canvas(bitmap)
+                        canvas.scale(scale, scale)
+                        card.draw(canvas)
                     }
                 }.getOrNull()
                 val overlay = snapshot?.let { bitmap ->
