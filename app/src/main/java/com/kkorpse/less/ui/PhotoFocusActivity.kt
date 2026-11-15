@@ -62,6 +62,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var swipeOffsetY = 0f
     private var swipingView: View? = null
     private var lastPreloadPosition = -1
+    private val velocityTracker = android.view.VelocityTracker.obtain()
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
     private val colorResolver = PhotoColorResolver()
@@ -141,6 +142,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        runCatching { velocityTracker.recycle() }
         locationJob?.cancel()
         colorJob?.cancel()
         super.onDestroy()
@@ -169,6 +171,26 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
         binding.undoButton.setOnClickListener { undoLastMark() }
         binding.infoButton.setOnClickListener { showPhotoInfo() }
+        // 记录松手瞬间的竖直速度，用于把上滑的收尾时长按「距离 + 速度」算，
+        // 与左滑吸附（SnapHelper 同样按距离/速度决定时长）保持一致。
+        binding.pager.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: android.view.MotionEvent): Boolean {
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        velocityTracker.clear()
+                        velocityTracker.addMovement(e)
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> velocityTracker.addMovement(e)
+                    android.view.MotionEvent.ACTION_UP,
+                    android.view.MotionEvent.ACTION_CANCEL -> {
+                        velocityTracker.addMovement(e)
+                        velocityTracker.computeCurrentVelocity(1000)
+                    }
+                }
+                return false
+            }
+        })
+
         binding.pager.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
@@ -300,9 +322,15 @@ class PhotoFocusActivity : AppCompatActivity() {
                     return
                 }
                 // 和横向翻页完全同一套模型，只是把方向换成纵向。
+                val fromOffset = if (itemView.translationY < 0f) itemView.translationY else swipeOffsetY
+                val distance = itemView.height.toFloat() - fromOffset
+                val speed = kotlin.math.abs(velocityTracker.yVelocity).coerceAtLeast(600f)
+                val duration = (distance / speed * 1000f * 1.6f).toLong().coerceIn(120L, 320L)
+
                 DeckTransition.animate(
                     from = 0f,
                     to = 1f,
+                    duration = duration,
                     onUpdate = { p ->
                         DeckTransition.applyOutgoing(itemView, card, p, vertical = true)
                         if (nextView != null && nextCard != null) {

@@ -80,10 +80,11 @@ object DeckTransition {
         from: Float,
         to: Float,
         onUpdate: (Float) -> Unit,
-        onEnd: () -> Unit
+        onEnd: () -> Unit,
+        duration: Long = DURATION_MS
     ): ValueAnimator {
         return ValueAnimator.ofFloat(from, to).apply {
-            duration = DURATION_MS
+            this.duration = duration
             interpolator = DecelerateInterpolator()
             addUpdateListener { onUpdate(it.animatedValue as Float) }
             addListener(object : android.animation.AnimatorListenerAdapter() {
