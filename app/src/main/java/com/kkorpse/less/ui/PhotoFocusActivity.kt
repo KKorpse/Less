@@ -62,6 +62,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var swipeOffsetY = 0f
     private var swipingView: View? = null
     private var lastPreloadPosition = -1
+    private var deleteWaitAttempts = 0
     private val velocityTracker = android.view.VelocityTracker.obtain()
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
@@ -195,6 +196,23 @@ class PhotoFocusActivity : AppCompatActivity() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
                     updateCurrent()
+                    // 停止滚动后把不是当前页的子项收回原位：否则它们被我们钉在中间，
+                    // 触摸命中时（findChildViewUnder 从后往前找）会抢到手势，导致删错图。
+                    val current = currentPosition()
+                    for (index in 0 until recyclerView.childCount) {
+                        val child = recyclerView.getChildAt(index)
+                        if (child === exitingView) continue
+                        if (recyclerView.getChildAdapterPosition(child) != current) {
+                            child.translationX = 0f
+                            child.translationZ = 0f
+                            child.findViewById<FocusCardLayout>(R.id.card)?.let {
+                                it.alpha = 1f
+                                it.translationY = 0f
+                                it.scaleX = 1f
+                                it.scaleY = 1f
+                            }
+                        }
+                    }
                 }
             }
 
@@ -232,8 +250,10 @@ class PhotoFocusActivity : AppCompatActivity() {
                 recyclerView: RecyclerView,
                 viewHolder: RecyclerView.ViewHolder
             ): Int {
-                val page = adapter.currentList.getOrNull(viewHolder.bindingAdapterPosition)
-                return if (page is FocusPage.Photo) {
+                val position = viewHolder.bindingAdapterPosition
+                val page = adapter.currentList.getOrNull(position)
+                // 只允许当前正在看的那张上滑，避免手势落在被钉在中间的相邻页上
+                return if (page is FocusPage.Photo && position == currentPosition()) {
                     makeMovementFlags(0, ItemTouchHelper.UP)
                 } else {
                     0
@@ -299,9 +319,14 @@ class PhotoFocusActivity : AppCompatActivity() {
             }
 
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-                val position = viewHolder.bindingAdapterPosition
+                val position = currentPosition().takeIf { it != RecyclerView.NO_POSITION }
+                    ?: viewHolder.bindingAdapterPosition
                 val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
-                val itemView = viewHolder.itemView
+                val itemView = if (position == viewHolder.bindingAdapterPosition) {
+                    viewHolder.itemView
+                } else {
+                    binding.pager.findViewHolderForAdapterPosition(position)?.itemView ?: viewHolder.itemView
+                }
                 val card = itemView.findViewById<FocusCardLayout>(R.id.card)
                 exitingView = itemView
                 swipingView = null
@@ -321,36 +346,18 @@ class PhotoFocusActivity : AppCompatActivity() {
                     markForDeletion(position, page)
                     return
                 }
-                // 和横向翻页完全同一套模型，只是把方向换成纵向。
-                val fromOffset = if (itemView.translationY < 0f) itemView.translationY else swipeOffsetY
-                val distance = itemView.height.toFloat() - fromOffset
-                val speed = kotlin.math.abs(velocityTracker.yVelocity).coerceAtLeast(600f)
-                val duration = (distance / speed * 1000f * 1.6f).toLong().coerceIn(120L, 320L)
-
-                DeckTransition.animate(
-                    from = 0f,
-                    to = 1f,
-                    duration = duration,
-                    onUpdate = { p ->
-                        DeckTransition.applyOutgoing(itemView, card, p, vertical = true)
-                        if (nextView != null && nextCard != null) {
-                            DeckTransition.applyIncoming(
-                                nextView,
-                                nextCard,
-                                p,
-                                vertical = true,
-                                liftPx = 0f,
-                                opaque = true,
-                                fromScale = 1f
-                            )
-                        }
-                    },
-                    onEnd = {
+                // 下一张还没渲染出来时稍等一下再开始滑出，避免"边滑边解码"。
+                if (nextCard.photoView?.drawable == null && deleteWaitAttempts < 3) {
+                    deleteWaitAttempts++
+                    binding.pager.postDelayed({
                         if (exitingView === itemView) {
-                            removeWhenReady(position, page, itemView, nextView, nextCard)
+                            playDeleteTransition(position, page, itemView, card, nextView, nextCard)
                         }
-                    }
-                )
+                    }, 50L)
+                    return
+                }
+                deleteWaitAttempts = 0
+                playDeleteTransition(position, page, itemView, card, nextView, nextCard)
             }
 
             override fun clearView(
@@ -468,6 +475,44 @@ class PhotoFocusActivity : AppCompatActivity() {
                 )
             }
         }
+    }
+
+    /** 上滑删除的动画：当前页沿 Y 轴滑出，下一张已经在下面铺好。 */
+    private fun playDeleteTransition(
+        position: Int,
+        page: FocusPage.Photo,
+        itemView: View,
+        card: FocusCardLayout,
+        nextView: View,
+        nextCard: FocusCardLayout
+    ) {
+        val fromOffset = if (itemView.translationY < 0f) itemView.translationY else swipeOffsetY
+        val distance = itemView.height.toFloat() - fromOffset
+        val speed = kotlin.math.abs(velocityTracker.yVelocity).coerceAtLeast(600f)
+        val duration = (distance / speed * 1000f * 1.6f).toLong().coerceIn(120L, 320L)
+
+        DeckTransition.animate(
+            from = 0f,
+            to = 1f,
+            duration = duration,
+            onUpdate = { p ->
+                DeckTransition.applyOutgoing(itemView, card, p, vertical = true)
+                DeckTransition.applyIncoming(
+                    nextView,
+                    nextCard,
+                    p,
+                    vertical = true,
+                    liftPx = 0f,
+                    opaque = true,
+                    fromScale = 1f
+                )
+            },
+            onEnd = {
+                if (exitingView === itemView) {
+                    removeWhenReady(position, page, itemView, nextView, nextCard)
+                }
+            }
+        )
     }
 
     /**
