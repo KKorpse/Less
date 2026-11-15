@@ -295,9 +295,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                     return
                 }
 
-                // 下一张是真实存在的视图：把它钉到中间、从下方浮起，
-                // 和当前这张的飞出同时播放。当前这张在动画结束前一直留在列表里，
-                // 所以不存在 ViewHolder 被复用成下一张的问题。
+                // 下一张：和左滑完全一样的「发牌」参数，从下方浮起。
                 val nextView = binding.pager
                     .findViewHolderForAdapterPosition(position + 1)?.itemView
                 val nextCard = nextView?.findViewById<FocusCardLayout>(R.id.card)
@@ -318,6 +316,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                         .start()
                 }
 
+                // 当前这张：直接向上滑走，不再缩小/消失（方向等于「向上翻牌」）。
                 val startOffset = if (itemView.translationY < 0f) {
                     itemView.translationY
                 } else {
@@ -325,21 +324,12 @@ class PhotoFocusActivity : AppCompatActivity() {
                 }
                 card.translationY = startOffset
                 card.animate()
-                    .translationY(-itemView.height.toFloat() * 1.05f)
-                    .scaleX(0.45f)
-                    .scaleY(0.45f)
-                    .alpha(0f)
+                    .translationY(-itemView.height.toFloat())
                     .setDuration(260L)
-                    .setInterpolator(DecelerateInterpolator(1.6f))
+                    .setInterpolator(DecelerateInterpolator(1.2f))
                     .withEndAction {
                         if (exitingView === itemView) {
-                            // 动画结束再移除数据，此时下一张已经在中间完全显示。
-                            exitingView = null
-                            pendingNextReset = nextView
-                            markForDeletion(position, page)
-                            card.translationY = 0f
-                            card.scaleX = 1f
-                            card.scaleY = 1f
+                            removeWhenReady(position, page, itemView, nextView, nextCard)
                         }
                     }
                     .start()
@@ -465,6 +455,47 @@ class PhotoFocusActivity : AppCompatActivity() {
                         .build()
                 )
             }
+        }
+    }
+
+    /**
+     * 删除的收尾：等下一张的图片真正加载出来（最多等 1 秒）再把它从列表里移除，
+     * 避免出现“标记完了但下一张还是空的”的停顿。
+     */
+    private fun removeWhenReady(
+        position: Int,
+        page: FocusPage.Photo,
+        itemView: View,
+        nextView: View?,
+        nextCard: FocusCardLayout?,
+        attempt: Int = 0
+    ) {
+        val loaded = nextView == null || nextCard?.photoView?.drawable != null
+        if (!loaded && attempt < 20 && nextView?.parent != null) {
+            binding.pager.postDelayed({
+                removeWhenReady(position, page, itemView, nextView, nextCard, attempt + 1)
+            }, 50L)
+            return
+        }
+
+        exitingView = null
+        pendingNextReset = nextView
+        markForDeletion(position, page)
+        itemView.translationY = 0f
+        itemView.translationX = 0f
+        itemView.scaleX = 1f
+        itemView.scaleY = 1f
+        itemView.alpha = 1f
+        cardReset(itemView)
+    }
+
+    private fun cardReset(view: View) {
+        view.findViewById<FocusCardLayout>(R.id.card)?.let {
+            it.translationY = 0f
+            it.translationX = 0f
+            it.scaleX = 1f
+            it.scaleY = 1f
+            it.alpha = 1f
         }
     }
 
