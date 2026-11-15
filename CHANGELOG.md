@@ -1,5 +1,9 @@
 # Changelog
 
+## 2.2.37 — 2026-11-15
+
+- 上滑删除改为和左滑同一套机制：松手后让 RecyclerView 程序化滚动一页（`smoothScrollToPosition`），在 `onScrolled` 里按滚动进度绘制纵向位移，滚动到 idle 后再移除数据。不再手写 ValueAnimator，也不再手动找下一张视图。
+
 ## 2.2.36 — 2026-11-15
 
 - 上滑删除时下一张在动画过程中就出现（不再等删完）：新增 `PeekingLinearLayoutManager`，横向 pager 额外预布局一屏，保证「下一张」始终是已存在的真实视图，删除时可以被直接揭开。

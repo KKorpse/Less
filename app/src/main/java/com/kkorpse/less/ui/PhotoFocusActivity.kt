@@ -62,7 +62,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var swipeOffsetY = 0f
     private var swipingView: View? = null
     private var lastPreloadPosition = -1
-    private var deleteWaitAttempts = 0
+    private var pendingVerticalDelete = -1
     private val velocityTracker = android.view.VelocityTracker.obtain()
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
@@ -195,6 +195,10 @@ class PhotoFocusActivity : AppCompatActivity() {
         binding.pager.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    if (pendingVerticalDelete >= 0) {
+                        finishVerticalDelete(recyclerView)
+                        return
+                    }
                     updateCurrent()
                     // 停止滚动后把不是当前页的子项收回原位：否则它们被我们钉在中间，
                     // 触摸命中时（findChildViewUnder 从后往前找）会抢到手势，导致删错图。
@@ -217,6 +221,10 @@ class PhotoFocusActivity : AppCompatActivity() {
             }
 
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
+                if (pendingVerticalDelete >= 0) {
+                    applyVerticalDeleteTransform(recyclerView)
+                    return
+                }
                 // 横向翻页走同一套发牌模型：当前页随手指横向滑走，
                 // 后面那张钉到中间、从下方浮起并放大。
                 val width = recyclerView.width.toFloat().coerceAtLeast(1f)
@@ -253,7 +261,10 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val position = viewHolder.bindingAdapterPosition
                 val page = adapter.currentList.getOrNull(position)
                 // 只允许当前正在看的那张上滑，避免手势落在被钉在中间的相邻页上
-                return if (page is FocusPage.Photo && position == currentPosition()) {
+                return if (pendingVerticalDelete < 0 &&
+                    page is FocusPage.Photo &&
+                    position == currentPosition()
+                ) {
                     makeMovementFlags(0, ItemTouchHelper.UP)
                 } else {
                     0
@@ -320,44 +331,22 @@ class PhotoFocusActivity : AppCompatActivity() {
 
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
                 val position = currentPosition().takeIf { it != RecyclerView.NO_POSITION }
-                    ?: viewHolder.bindingAdapterPosition
+                    ?: return
+                if (pendingVerticalDelete >= 0) return
                 val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
-                val itemView = if (position == viewHolder.bindingAdapterPosition) {
-                    viewHolder.itemView
-                } else {
-                    binding.pager.findViewHolderForAdapterPosition(position)?.itemView ?: viewHolder.itemView
-                }
-                val card = itemView.findViewById<FocusCardLayout>(R.id.card)
-                exitingView = itemView
-                swipingView = null
-                binding.swipeGlow.animate().alpha(0f).setDuration(DeckTransition.DURATION_MS).start()
 
-                if (card == null) {
+                binding.swipeGlow.animate().alpha(0f).setDuration(200L).start()
+
+                if (position + 1 >= adapter.itemCount) {
+                    // 最后一张：没有下一页可滚，直接移除。
                     markForDeletion(position, page)
                     return
                 }
 
-                val nextView = binding.pager
-                    .findViewHolderForAdapterPosition(position + 1)?.itemView
-                val nextCard = nextView?.findViewById<FocusCardLayout>(R.id.card)
-                if (nextView == null || nextCard == null) {
-                    // 没有下一张可露出（最后一张）：直接移除，不播放滑走动画。
-                    exitingView = null
-                    markForDeletion(position, page)
-                    return
-                }
-                // 下一张还没渲染出来时稍等一下再开始滑出，避免"边滑边解码"。
-                if (nextCard.photoView?.drawable == null && deleteWaitAttempts < 3) {
-                    deleteWaitAttempts++
-                    binding.pager.postDelayed({
-                        if (exitingView === itemView) {
-                            playDeleteTransition(position, page, itemView, card, nextView, nextCard)
-                        }
-                    }, 50L)
-                    return
-                }
-                deleteWaitAttempts = 0
-                playDeleteTransition(position, page, itemView, card, nextView, nextCard)
+                // 上滑 = 让 RecyclerView 往前滚一页，纵向视觉在 onScrolled 里绘制。
+                // 这样进度、时长、吸附和左滑完全同一套机制。
+                pendingVerticalDelete = position
+                binding.pager.smoothScrollToPosition(position + 1)
             }
 
             override fun clearView(
@@ -477,69 +466,57 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
     }
 
-    /** 上滑删除的动画：当前页沿 Y 轴滑出，下一张已经在下面铺好。 */
-    private fun playDeleteTransition(
-        position: Int,
-        page: FocusPage.Photo,
-        itemView: View,
-        card: FocusCardLayout,
-        nextView: View,
-        nextCard: FocusCardLayout
-    ) {
-        val fromOffset = if (itemView.translationY < 0f) itemView.translationY else swipeOffsetY
-        val distance = itemView.height.toFloat() - fromOffset
-        val speed = kotlin.math.abs(velocityTracker.yVelocity).coerceAtLeast(600f)
-        val duration = (distance / speed * 1000f * 1.6f).toLong().coerceIn(120L, 320L)
+    /** 删除滚动：当前页沿 Y 轴滑出，下一张钉在中间直接露出。 */
+    private fun applyVerticalDeleteTransform(recyclerView: RecyclerView) {
+        val width = recyclerView.width.toFloat().coerceAtLeast(1f)
+        val outgoing = binding.pager.findViewHolderForAdapterPosition(pendingVerticalDelete)?.itemView
+            ?: return
+        val incoming = binding.pager
+            .findViewHolderForAdapterPosition(pendingVerticalDelete + 1)?.itemView
 
-        DeckTransition.animate(
-            from = 0f,
-            to = 1f,
-            duration = duration,
-            onUpdate = { p ->
-                DeckTransition.applyOutgoing(itemView, card, p, vertical = true)
-                DeckTransition.applyIncoming(
-                    nextView,
-                    nextCard,
-                    p,
-                    vertical = true,
-                    liftPx = 0f,
-                    opaque = true,
-                    fromScale = 1f
-                )
-            },
-            onEnd = {
-                if (exitingView === itemView) {
-                    removeWhenReady(position, page, itemView, nextView, nextCard)
-                }
+        val p = (-outgoing.left / width).coerceIn(0f, 1f)
+        outgoing.translationX = -outgoing.left.toFloat()
+        outgoing.translationY = -p * outgoing.height
+        outgoing.translationZ = 2f
+
+        incoming?.let { view ->
+            view.translationX = -view.left.toFloat()
+            view.translationY = 0f
+            view.translationZ = 0f
+            view.findViewById<FocusCardLayout>(R.id.card)?.let {
+                it.alpha = 1f
+                it.translationY = 0f
+                it.scaleX = 1f
+                it.scaleY = 1f
             }
-        )
+        }
     }
 
-    /**
-     * 删除的收尾：等下一张的图片真正加载出来（最多等 1 秒）再把它从列表里移除，
-     * 避免出现“标记完了但下一张还是空的”的停顿。
-     */
-    private fun removeWhenReady(
-        position: Int,
-        page: FocusPage.Photo,
-        itemView: View,
-        nextView: View?,
-        nextCard: FocusCardLayout?,
-        attempt: Int = 0
-    ) {
-        val loaded = nextView == null || nextCard?.photoView?.drawable != null
-        if (!loaded && attempt < 20 && nextView?.parent != null) {
-            binding.pager.postDelayed({
-                removeWhenReady(position, page, itemView, nextView, nextCard, attempt + 1)
-            }, 50L)
-            return
+    /** 删除滚动结束：移除这一张，并复位临时位移。 */
+    private fun finishVerticalDelete(recyclerView: RecyclerView) {
+        val position = pendingVerticalDelete
+        pendingVerticalDelete = -1
+        val outgoing = binding.pager.findViewHolderForAdapterPosition(position)?.itemView
+        val incoming = binding.pager.findViewHolderForAdapterPosition(position + 1)?.itemView
+        val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo
+
+        outgoing?.let {
+            it.translationX = 0f
+            it.translationY = 0f
+            it.translationZ = 0f
+            it.findViewById<FocusCardLayout>(R.id.card)?.let { card -> DeckTransition.reset(it, card) }
+        }
+        incoming?.let {
+            it.translationX = 0f
+            it.translationY = 0f
+            it.translationZ = 0f
         }
 
-        exitingView = null
-        pendingNextReset = nextView
-        markForDeletion(position, page)
-        // 不要在这里复位 itemView：它还停在屏幕上方，立刻复位会让"要删的这张"
-        // 弹回视野闪一下。视图被复用时 bind() 会还原状态。
+        if (page != null) {
+            pendingNextReset = incoming
+            markForDeletion(position, page)
+        }
+        updateCurrent()
     }
 
     private fun updateChrome(page: FocusPage?) {
