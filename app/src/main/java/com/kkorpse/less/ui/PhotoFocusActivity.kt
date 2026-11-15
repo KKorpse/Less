@@ -288,6 +288,8 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val card = itemView.findViewById<FocusCardLayout>(R.id.card)
                 exitingView = itemView
                 swipingView = null
+                // 当前这张要在上面，滑走时才会露出下面那张，而不是被它盖住。
+                itemView.translationZ = 2f
                 binding.swipeGlow.animate().alpha(0f).setDuration(240L).start()
 
                 if (card == null) {
@@ -300,15 +302,15 @@ class PhotoFocusActivity : AppCompatActivity() {
                     .findViewHolderForAdapterPosition(position + 1)?.itemView
                 val nextCard = nextView?.findViewById<FocusCardLayout>(R.id.card)
                 if (nextView != null && nextCard != null) {
+                    // 下一张始终不透明、铺满在下面：当前这张滑走时直接露出它，
+                    // 不再用 alpha 淡入，否则滑走的空档会露出黑底（大黑屏闪一下）。
                     nextView.translationX = -nextView.width.toFloat()
-                    nextView.translationZ = 2f
-                    nextCard.alpha = 0f
-                    nextCard.translationY = dp(72).toFloat()
-                    nextCard.scaleX = 0.94f
-                    nextCard.scaleY = 0.94f
+                    nextView.translationZ = 0f
+                    nextCard.alpha = 1f
+                    nextCard.translationY = 0f
+                    nextCard.scaleX = 0.985f
+                    nextCard.scaleY = 0.985f
                     nextCard.animate()
-                        .alpha(1f)
-                        .translationY(0f)
                         .scaleX(1f)
                         .scaleY(1f)
                         .setDuration(260L)
@@ -483,6 +485,7 @@ class PhotoFocusActivity : AppCompatActivity() {
         markForDeletion(position, page)
         itemView.translationY = 0f
         itemView.translationX = 0f
+        itemView.translationZ = 0f
         itemView.scaleX = 1f
         itemView.scaleY = 1f
         itemView.alpha = 1f
