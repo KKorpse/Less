@@ -177,34 +177,27 @@ class PhotoFocusActivity : AppCompatActivity() {
             }
 
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                // 当前这张正常向左划走；后面的牌贴到中间，从下方浮起盖上来。
+                // 横向翻页走同一套发牌模型：当前页随手指横向滑走，
+                // 后面那张钉到中间、从下方浮起并放大。
                 val width = recyclerView.width.toFloat().coerceAtLeast(1f)
                 val center = width / 2f
                 for (index in 0 until recyclerView.childCount) {
                     val child = recyclerView.getChildAt(index)
-                    if (child === exitingView || child === swipingView) {
-                        continue
-                    }
+                    if (child === exitingView || child === swipingView) continue
                     val card = child.findViewById<FocusCardLayout>(R.id.card) ?: continue
                     val childCenter = (child.left + child.right) / 2f
                     val offset = ((childCenter - center) / width).coerceIn(-1f, 1f)
                     if (offset > 0f) {
-                        // 后面还没到中心的牌：不再从右边滑，改为从下方浮起
-                        child.translationX = -offset * width
-                        child.translationZ = 0f
-                        card.alpha = (1f - offset).coerceIn(0f, 1f)
-                        card.translationY = dp(72).toFloat() * offset
-                        val scale = 1f - 0.06f * offset
-                        card.scaleX = scale
-                        card.scaleY = scale
+                        DeckTransition.applyIncoming(
+                            child,
+                            card,
+                            p = 1f - offset,
+                            vertical = false,
+                            liftPx = dp(72).toFloat(),
+                            opaque = false
+                        )
                     } else {
-                        // 当前这张：保持原来的横向位置，随手指向左划走
-                        child.translationX = 0f
-                        child.translationZ = 1f
-                        card.alpha = 1f
-                        card.translationY = 0f
-                        card.scaleX = 1f
-                        card.scaleY = 1f
+                        DeckTransition.applyOutgoing(child, card, -offset, vertical = false)
                     }
                 }
             }
@@ -288,53 +281,41 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val card = itemView.findViewById<FocusCardLayout>(R.id.card)
                 exitingView = itemView
                 swipingView = null
-                // 当前这张要在上面，滑走时才会露出下面那张，而不是被它盖住。
-                itemView.translationZ = 2f
-                binding.swipeGlow.animate().alpha(0f).setDuration(240L).start()
+                binding.swipeGlow.animate().alpha(0f).setDuration(DeckTransition.DURATION_MS).start()
 
                 if (card == null) {
                     markForDeletion(position, page)
                     return
                 }
 
-                // 下一张：和左滑完全一样的「发牌」参数，从下方浮起。
                 val nextView = binding.pager
                     .findViewHolderForAdapterPosition(position + 1)?.itemView
                 val nextCard = nextView?.findViewById<FocusCardLayout>(R.id.card)
-                if (nextView != null && nextCard != null) {
-                    // 下一张始终不透明、铺满在下面：当前这张滑走时直接露出它，
-                    // 不再用 alpha 淡入，否则滑走的空档会露出黑底（大黑屏闪一下）。
-                    nextView.translationX = -nextView.width.toFloat()
-                    nextView.translationZ = 0f
-                    nextCard.alpha = 1f
-                    nextCard.translationY = 0f
-                    nextCard.scaleX = 0.985f
-                    nextCard.scaleY = 0.985f
-                    nextCard.animate()
-                        .scaleX(1f)
-                        .scaleY(1f)
-                        .setDuration(260L)
-                        .setInterpolator(DecelerateInterpolator())
-                        .start()
-                }
+                val lift = dp(72).toFloat()
 
-                // 当前这张：直接向上滑走，不再缩小/消失（方向等于「向上翻牌」）。
-                val startOffset = if (itemView.translationY < 0f) {
-                    itemView.translationY
-                } else {
-                    swipeOffsetY
-                }
-                card.translationY = startOffset
-                card.animate()
-                    .translationY(-itemView.height.toFloat())
-                    .setDuration(260L)
-                    .setInterpolator(DecelerateInterpolator(1.2f))
-                    .withEndAction {
+                // 和横向翻页完全同一套模型，只是把方向换成纵向。
+                DeckTransition.animate(
+                    from = 0f,
+                    to = 1f,
+                    onUpdate = { p ->
+                        DeckTransition.applyOutgoing(itemView, card, p, vertical = true)
+                        if (nextView != null && nextCard != null) {
+                            DeckTransition.applyIncoming(
+                                nextView,
+                                nextCard,
+                                p,
+                                vertical = true,
+                                liftPx = lift,
+                                opaque = true
+                            )
+                        }
+                    },
+                    onEnd = {
                         if (exitingView === itemView) {
                             removeWhenReady(position, page, itemView, nextView, nextCard)
                         }
                     }
-                    .start()
+                )
             }
 
             override fun clearView(
@@ -388,14 +369,8 @@ class PhotoFocusActivity : AppCompatActivity() {
                         updateCurrent()
                         // 列表已经更新、下一张已经就位于中心，这时再清掉临时位移。
                         pendingNextReset?.let { view ->
-                            view.translationX = 0f
-                            view.translationZ = 0f
-                            view.findViewById<FocusCardLayout>(R.id.card)?.let {
-                                it.alpha = 1f
-                                it.translationY = 0f
-                                it.scaleX = 1f
-                                it.scaleY = 1f
-                            }
+                            val card = view.findViewById<FocusCardLayout>(R.id.card)
+                            if (card != null) DeckTransition.reset(view, card)
                             pendingNextReset = null
                         }
                     }
@@ -483,23 +458,8 @@ class PhotoFocusActivity : AppCompatActivity() {
         exitingView = null
         pendingNextReset = nextView
         markForDeletion(position, page)
-        itemView.translationY = 0f
-        itemView.translationX = 0f
-        itemView.translationZ = 0f
-        itemView.scaleX = 1f
-        itemView.scaleY = 1f
-        itemView.alpha = 1f
-        cardReset(itemView)
-    }
-
-    private fun cardReset(view: View) {
-        view.findViewById<FocusCardLayout>(R.id.card)?.let {
-            it.translationY = 0f
-            it.translationX = 0f
-            it.scaleX = 1f
-            it.scaleY = 1f
-            it.alpha = 1f
-        }
+        itemView.findViewById<FocusCardLayout>(R.id.card)
+            ?.let { DeckTransition.reset(itemView, it) }
     }
 
     private fun updateChrome(page: FocusPage?) {
