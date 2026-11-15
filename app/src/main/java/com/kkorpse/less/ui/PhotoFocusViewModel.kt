@@ -47,7 +47,8 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
         items.forEachIndexed { index, item ->
             photoPages += FocusPage.Photo(item, index)
         }
-        currentIndex = startIndex.coerceIn(0, items.lastIndex.coerceAtLeast(0))
+        restorePendingMarks()
+        currentIndex = startIndex.coerceIn(0, photoPages.lastIndex.coerceAtLeast(0))
         emit()
     }
 
@@ -67,6 +68,7 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
                     }
                     photoPages.clear()
                     pending.clear()
+                    persistPendingMarks()
                     groupSize = photos.size
                     photos.forEachIndexed { index, item ->
                         photoPages += FocusPage.Photo(item, index)
@@ -91,6 +93,7 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
         if (index == -1) return false
         photoPages.removeAt(index)
         pending += PendingDelete(page.item, page.originalIndex)
+        persistPendingMarks()
         emit()
         return true
     }
@@ -98,6 +101,7 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
     fun undoLastPending(): PendingDelete? {
         val entry = pending.removeLastOrNull() ?: return null
         insertPhoto(entry)
+        persistPendingMarks()
         emit()
         return entry
     }
@@ -125,6 +129,7 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
         }
         pending.removeAll { it.item.uri in uris }
         pending.clear()
+        persistPendingMarks()
         busy = false
         currentIndex = 0
         emit()
@@ -133,9 +138,36 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
     /** 汇总页「放弃，再来一组」：丢掉这一组的删除标记。 */
     fun discardGroup() {
         pending.clear()
+        persistPendingMarks()
         busy = false
         currentIndex = 0
         emit()
+    }
+
+    /** 退出前标记的删除项，重新进入时恢复。 */
+    private fun restorePendingMarks() {
+        if (!autoNextGroup) return
+        val mode = app.preferences.browseMode.name
+        val saved = app.browseStore.pendingMarks(mode)
+        if (saved.isEmpty()) return
+        val byUri = photoPages.associateBy { it.item.uri.toString() }
+        saved.forEach { mark ->
+            val parts = mark.split('|')
+            if (parts.size != 2) return@forEach
+            val page = byUri[parts[0]] ?: return@forEach
+            val originalIndex = parts[1].toIntOrNull() ?: page.originalIndex
+            pending += PendingDelete(page.item, originalIndex)
+            photoPages.remove(page)
+        }
+    }
+
+    private fun persistPendingMarks() {
+        if (!autoNextGroup) return
+        val mode = app.preferences.browseMode.name
+        app.browseStore.setPendingMarks(
+            mode,
+            pending.map { "${it.item.uri}|${it.originalIndex}" }
+        )
     }
 
     fun pendingEntries(): List<PendingDelete> = pending.toList()

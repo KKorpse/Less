@@ -140,10 +140,8 @@ class PhotoFocusActivity : AppCompatActivity() {
         // 只记录从首页进入的组；收藏页进来的会话不覆盖首页进度。
         if (!PhotoFocusSession.autoNextGroup) return
         val app = application as LessApp
-        val photos = viewModel.pages.value.filterIsInstance<FocusPage.Photo>()
-        val key = photos.firstOrNull()?.item?.uri?.toString() ?: return
-        app.preferences.photoGroupKey = key
-        app.preferences.photoGroupIndex = viewModel.currentIndex
+        val mode = app.preferences.browseMode.name
+        app.browseStore.setGroupIndex(mode, viewModel.currentIndex)
     }
 
     override fun onDestroy() {
@@ -183,19 +181,25 @@ class PhotoFocusActivity : AppCompatActivity() {
             }
 
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                // 翻页过程中：当前页滑走、相邻页从下方渐显，形成中途状态。
-                val center = recyclerView.width / 2f
+                // 翻页像发牌：卡片不横向滑动，始终叠在中间；
+                // 离中心越远越靠下、越小、越透明，靠近中心时才浮上来。
+                val width = recyclerView.width.toFloat().coerceAtLeast(1f)
+                val center = width / 2f
                 for (index in 0 until recyclerView.childCount) {
                     val child = recyclerView.getChildAt(index)
-                    if (child === exitingView || child === swipingView || child === entranceView) continue
+                    if (child === exitingView || child === swipingView || child === entranceView) {
+                        continue
+                    }
                     val card = child.findViewById<FocusCardLayout>(R.id.card) ?: continue
                     val childCenter = (child.left + child.right) / 2f
-                    val offset = ((childCenter - center) / recyclerView.width)
-                        .coerceIn(-1f, 1f)
+                    val offset = ((childCenter - center) / width).coerceIn(-1f, 1f)
                     val away = kotlin.math.abs(offset)
-                    card.alpha = 1f - 0.45f * away
-                    card.translationY = dp(26).toFloat() * away
-                    val scale = 1f - 0.04f * away
+                    // 抵消横向位移：视觉上不再左右滑动
+                    child.translationX = -offset * width
+                    child.translationZ = 1f - away
+                    card.alpha = 1f - 0.85f * away
+                    card.translationY = dp(72).toFloat() * away
+                    val scale = 1f - 0.06f * away
                     card.scaleX = scale
                     card.scaleY = scale
                 }

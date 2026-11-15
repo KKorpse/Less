@@ -205,6 +205,21 @@ class BrowseStore(context: Context) {
         prefs.edit().remove(KEY_CURRENT_GROUP + "_" + mode).apply()
     }
 
+    /** 组内看到第几张（按模式保存，重启/退出后继续）。 */
+    fun groupIndex(mode: String): Int = prefs.getInt(KEY_GROUP_INDEX + "_" + mode, 0)
+
+    fun setGroupIndex(mode: String, index: Int) {
+        prefs.edit().putInt(KEY_GROUP_INDEX + "_" + mode, index.coerceAtLeast(0)).apply()
+    }
+
+    /** 还没确认删除的标记（uri|originalIndex），按模式保存。 */
+    fun pendingMarks(mode: String): List<String> =
+        prefs.getStringSet(KEY_PENDING_MARKS + "_" + mode, emptySet())?.toList() ?: emptyList()
+
+    fun setPendingMarks(mode: String, marks: Collection<String>) {
+        prefs.edit().putStringSet(KEY_PENDING_MARKS + "_" + mode, marks.toSet()).apply()
+    }
+
     fun onTrashed(isVideo: Boolean) {
         if (isVideo) {
             deletedVideos++
@@ -241,6 +256,8 @@ class BrowseStore(context: Context) {
         private const val KEY_DELETED_VIDEOS = "deleted_videos"
         private const val KEY_CURSOR = "sequential_cursor"
         private const val KEY_CURRENT_GROUP = "current_group"
+        private const val KEY_GROUP_INDEX = "group_index"
+        private const val KEY_PENDING_MARKS = "pending_marks"
         private const val KEY_VIDEO_CURSOR = "video_cursor"
         private const val KEY_FAVORITE_COPIES = "favorite_copies"
         private const val KEY_PENDING_CLEANUP = "pending_cleanup"
