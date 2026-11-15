@@ -82,9 +82,16 @@ class SettingsActivity : AppCompatActivity() {
         }
         binding.browseModeGroup.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked) return@addOnButtonCheckedListener
-            preferences.browseMode = when (checkedId) {
+            val target = when (checkedId) {
                 R.id.modeRandom -> BrowseMode.RANDOM
                 else -> BrowseMode.SEQUENTIAL
+            }
+            val previous = preferences.browseMode
+            if (previous == target) return@addOnButtonCheckedListener
+            preferences.browseMode = target
+            // 只有「顺序 -> 随机」才换一组；随机 -> 顺序 要回到原来那一组。
+            if (previous == BrowseMode.SEQUENTIAL && target == BrowseMode.RANDOM) {
+                app.browseStore.clearCurrentGroup(BrowseMode.RANDOM.name)
             }
         }
 

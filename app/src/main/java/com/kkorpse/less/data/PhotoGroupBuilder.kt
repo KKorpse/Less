@@ -29,7 +29,7 @@ class PhotoGroupBuilder(
     }
 
     private fun restoreGroup(photos: List<MediaItem>): List<MediaItem>? {
-        val saved = store.currentGroupUris()
+        val saved = store.currentGroupUris(preferences.browseMode.name)
         if (saved.isEmpty()) return null
         val byUri = photos.associateBy { it.uri.toString() }
         val restored = saved.mapNotNull { byUri[it] }
@@ -40,7 +40,7 @@ class PhotoGroupBuilder(
 
     private fun createGroup(photos: List<MediaItem>): List<MediaItem> {
         val group = selectGroup(photos, preferences.groupSize, preferences.browseMode)
-        store.setCurrentGroupUris(group.map { it.uri.toString() })
+        store.setCurrentGroupUris(preferences.browseMode.name, group.map { it.uri.toString() })
         return group
     }
 

@@ -189,20 +189,20 @@ class BrowseStore(context: Context) {
      * 当前这一组照片的 URI（保持顺序）。有它之后，退出照片专注或重开 App
      * 都还能回到同一组，不会重新随机一次。
      */
-    fun currentGroupUris(): List<String> =
-        prefs.getString(KEY_CURRENT_GROUP, null)
+    fun currentGroupUris(mode: String): List<String> =
+        prefs.getString(KEY_CURRENT_GROUP + "_" + mode, null)
             ?.split('\n')
             ?.filter { it.isNotBlank() }
             ?: emptyList()
 
-    fun setCurrentGroupUris(uris: List<String>) {
+    fun setCurrentGroupUris(mode: String, uris: List<String>) {
         prefs.edit()
-            .putString(KEY_CURRENT_GROUP, uris.joinToString("\n"))
+            .putString(KEY_CURRENT_GROUP + "_" + mode, uris.joinToString("\n"))
             .apply()
     }
 
-    fun clearCurrentGroup() {
-        prefs.edit().remove(KEY_CURRENT_GROUP).apply()
+    fun clearCurrentGroup(mode: String) {
+        prefs.edit().remove(KEY_CURRENT_GROUP + "_" + mode).apply()
     }
 
     fun onTrashed(isVideo: Boolean) {

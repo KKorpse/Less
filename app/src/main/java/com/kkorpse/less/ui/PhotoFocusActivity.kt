@@ -5,11 +5,14 @@ import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
+import android.graphics.Bitmap
+import android.graphics.Canvas
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -61,6 +64,8 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var swipeOffsetY = 0f
     private var swipingView: View? = null
     private var lastPreloadPosition = -1
+    private var entranceView: View? = null
+    private var pendingEntrance = false
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
     private val colorResolver = PhotoColorResolver()
@@ -182,7 +187,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val center = recyclerView.width / 2f
                 for (index in 0 until recyclerView.childCount) {
                     val child = recyclerView.getChildAt(index)
-                    if (child === exitingView || child === swipingView) continue
+                    if (child === exitingView || child === swipingView || child === entranceView) continue
                     val card = child.findViewById<FocusCardLayout>(R.id.card) ?: continue
                     val childCenter = (child.left + child.right) / 2f
                     val offset = ((childCenter - center) / recyclerView.width)
@@ -271,11 +276,9 @@ class PhotoFocusActivity : AppCompatActivity() {
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
                 val position = viewHolder.bindingAdapterPosition
                 val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
-                val view = viewHolder.itemView
-                val card = view.findViewById<FocusCardLayout>(R.id.card)
-                exitingView = view
+                val itemView = viewHolder.itemView
+                val card = itemView.findViewById<FocusCardLayout>(R.id.card)
                 swipingView = null
-                fadeInNeighbour(position)
                 binding.swipeGlow.animate().alpha(0f).setDuration(240L).start()
 
                 if (card == null) {
@@ -283,40 +286,55 @@ class PhotoFocusActivity : AppCompatActivity() {
                     return
                 }
 
-                // 记住松手这一刻的真实位移与缩放，退场动画从这里接着走。
-                val startOffset = if (view.translationY < 0f) view.translationY else swipeOffsetY
-                val startScale = card.scaleX
-                val startAlpha = card.alpha
+                // 先把当前这张拍成快照，盖在最上层飞走；真正的列表立刻更新，
+                // 让下一张就位，再从下方浮现——这样删除不会有“等一下才划过来”的停顿。
+                val snapshot = runCatching {
+                    Bitmap.createBitmap(card.width, card.height, Bitmap.Config.ARGB_8888).also {
+                        card.draw(Canvas(it))
+                    }
+                }.getOrNull()
+                val overlay = snapshot?.let { bitmap ->
+                    ImageView(this@PhotoFocusActivity).apply {
+                        setImageBitmap(bitmap)
+                        scaleType = ImageView.ScaleType.FIT_XY
+                        alpha = card.alpha
+                        translationY = if (itemView.translationY < 0f) {
+                            itemView.translationY
+                        } else {
+                            swipeOffsetY
+                        }
+                        isClickable = false
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    }
+                }
+                if (overlay != null) {
+                    val cardLocation = IntArray(2).also { card.getLocationInWindow(it) }
+                    val rootLocation = IntArray(2).also { binding.root.getLocationInWindow(it) }
+                    binding.root.addView(
+                        overlay,
+                        FrameLayout.LayoutParams(card.width, card.height).apply {
+                            leftMargin = cardLocation[0] - rootLocation[0]
+                            topMargin = cardLocation[1] - rootLocation[1]
+                        }
+                    )
+                }
 
-                // ItemTouchHelper 会在 onSwiped 之后把 itemView 的 translation 归零。
-                // 放到下一帧再设置 card 的位移，否则这一帧 itemView + card 会叠加成双倍偏移（抖动）。
-                view.post {
-                    if (view.parent == null) return@post
-                    view.translationY = 0f
-                    card.translationY = startOffset
-                    card.scaleX = startScale
-                    card.scaleY = startScale
-                    card.alpha = startAlpha
-                    card.setLayerType(View.LAYER_TYPE_HARDWARE, null)
+                pendingEntrance = true
+                markForDeletion(position, page)
 
-                    card.animate()
-                        .translationY(-view.height.toFloat() * 1.05f)
+                overlay?.let { view ->
+                    view.animate()
+                        .translationY(-itemView.height.toFloat() * 1.05f)
                         .scaleX(0.45f)
                         .scaleY(0.45f)
                         .alpha(0f)
                         .setDuration(260L)
                         .setInterpolator(DecelerateInterpolator(1.6f))
-                        .withEndAction {
-                            card.setLayerType(View.LAYER_TYPE_NONE, null)
-                            if (exitingView === view) exitingView = null
-                            markForDeletion(position, page)
-                            card.translationY = 0f
-                            card.translationX = 0f
-                            card.scaleX = 1f
-                            card.scaleY = 1f
-                        }
+                        .withEndAction { binding.root.removeView(view) }
                         .start()
                 }
+
+
             }
 
             override fun clearView(
@@ -368,6 +386,10 @@ class PhotoFocusActivity : AppCompatActivity() {
                             }
                         }
                         updateCurrent()
+                        if (pendingEntrance) {
+                            pendingEntrance = false
+                            binding.pager.post { playEntranceFromBelow() }
+                        }
                     }
                 }
             }
@@ -430,22 +452,27 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
     }
 
-    /** 删除时让下一张同时从下方渐显，避免出现一帧空档。 */
-    private fun fadeInNeighbour(position: Int) {
-        val holder = binding.pager.findViewHolderForAdapterPosition(position + 1) ?: return
+    /** 新就位的一张从下方翻上来。 */
+    private fun playEntranceFromBelow() {
+        val position = currentPosition()
+        if (position == RecyclerView.NO_POSITION) return
+        val holder = binding.pager.findViewHolderForAdapterPosition(position) ?: return
         val card = holder.itemView.findViewById<FocusCardLayout>(R.id.card) ?: return
-        card.alpha = 0.35f
-        card.translationY = dp(26).toFloat()
-        val scale = 0.96f
-        card.scaleX = scale
-        card.scaleY = scale
+        entranceView = holder.itemView
+        card.alpha = 0f
+        card.translationY = dp(60).toFloat()
+        card.scaleX = 0.94f
+        card.scaleY = 0.94f
         card.animate()
             .alpha(1f)
             .translationY(0f)
             .scaleX(1f)
             .scaleY(1f)
-            .setDuration(260L)
+            .setDuration(240L)
             .setInterpolator(DecelerateInterpolator())
+            .withEndAction {
+                if (entranceView === holder.itemView) entranceView = null
+            }
             .start()
     }
 

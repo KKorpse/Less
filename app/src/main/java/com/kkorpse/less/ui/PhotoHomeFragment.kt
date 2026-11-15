@@ -42,6 +42,8 @@ class PhotoHomeFragment : Fragment() {
 
     private val viewModel: PhotoHomeViewModel by viewModels()
     private var lastSettingsSignature = ""
+    private var lastGroupSize = -1
+    private var lastBrowseMode: String? = null
     private lateinit var repository: MediaRepository
 
     private val focusLauncher = registerForActivityResult(
@@ -125,13 +127,19 @@ class PhotoHomeFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
-        val signature = settingsSignature()
-        if (lastSettingsSignature.isNotEmpty() && signature != lastSettingsSignature) {
-            lastSettingsSignature = signature
+        val app = requireActivity().application as LessApp
+        val size = app.preferences.groupSize
+        val mode = app.preferences.browseMode.name
+        if (lastGroupSize != -1 && size != lastGroupSize) {
+            // 每组数量变了才重新切一组。
             viewModel.load(force = true)
-        } else {
-            lastSettingsSignature = signature
+        } else if (lastBrowseMode != null && mode != lastBrowseMode) {
+            // 切换模式只恢复该模式原来那一组（顺序 -> 随机 时随机组已在设置里清空）。
+            viewModel.load(force = false)
         }
+        lastGroupSize = size
+        lastBrowseMode = mode
+        lastSettingsSignature = settingsSignature()
     }
 
     override fun onHiddenChanged(hidden: Boolean) {
