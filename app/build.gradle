@@ -19,8 +19,8 @@ android {
         applicationId "com.kkorpse.less"
         minSdk 29
         targetSdk 36
-        versionCode 44
-        versionName "2.2.35"
+        versionCode 45
+        versionName "2.2.36"
 
         vectorDrawables.useSupportLibrary = true
     }

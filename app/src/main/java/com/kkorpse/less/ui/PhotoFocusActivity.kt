@@ -104,7 +104,7 @@ class PhotoFocusActivity : AppCompatActivity() {
             onDiscardGroup = ::discardGroup
         )
 
-        layoutManager = LinearLayoutManager(this, LinearLayoutManager.HORIZONTAL, false)
+        layoutManager = PeekingLinearLayoutManager(this)
         binding.pager.layoutManager = layoutManager
         binding.pager.adapter = adapter
         binding.pager.itemAnimator = null
@@ -538,8 +538,8 @@ class PhotoFocusActivity : AppCompatActivity() {
         exitingView = null
         pendingNextReset = nextView
         markForDeletion(position, page)
-        itemView.findViewById<FocusCardLayout>(R.id.card)
-            ?.let { DeckTransition.reset(itemView, it) }
+        // 不要在这里复位 itemView：它还停在屏幕上方，立刻复位会让"要删的这张"
+        // 弹回视野闪一下。视图被复用时 bind() 会还原状态。
     }
 
     private fun updateChrome(page: FocusPage?) {
