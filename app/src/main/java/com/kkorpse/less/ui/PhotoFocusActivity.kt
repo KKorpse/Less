@@ -181,8 +181,7 @@ class PhotoFocusActivity : AppCompatActivity() {
             }
 
             override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                // 翻页像发牌：卡片不横向滑动，始终叠在中间；
-                // 离中心越远越靠下、越小、越透明，靠近中心时才浮上来。
+                // 当前这张正常向左划走；后面的牌贴到中间，从下方浮起盖上来。
                 val width = recyclerView.width.toFloat().coerceAtLeast(1f)
                 val center = width / 2f
                 for (index in 0 until recyclerView.childCount) {
@@ -193,15 +192,24 @@ class PhotoFocusActivity : AppCompatActivity() {
                     val card = child.findViewById<FocusCardLayout>(R.id.card) ?: continue
                     val childCenter = (child.left + child.right) / 2f
                     val offset = ((childCenter - center) / width).coerceIn(-1f, 1f)
-                    val away = kotlin.math.abs(offset)
-                    // 抵消横向位移：视觉上不再左右滑动
-                    child.translationX = -offset * width
-                    child.translationZ = 1f - away
-                    card.alpha = 1f - 0.85f * away
-                    card.translationY = dp(72).toFloat() * away
-                    val scale = 1f - 0.06f * away
-                    card.scaleX = scale
-                    card.scaleY = scale
+                    if (offset > 0f) {
+                        // 后面还没到中心的牌：不再从右边滑，改为从下方浮起
+                        child.translationX = -offset * width
+                        child.translationZ = 0f
+                        card.alpha = (1f - offset).coerceIn(0f, 1f)
+                        card.translationY = dp(72).toFloat() * offset
+                        val scale = 1f - 0.06f * offset
+                        card.scaleX = scale
+                        card.scaleY = scale
+                    } else {
+                        // 当前这张：保持原来的横向位置，随手指向左划走
+                        child.translationX = 0f
+                        child.translationZ = 1f
+                        card.alpha = 1f
+                        card.translationY = 0f
+                        card.scaleX = 1f
+                        card.scaleY = 1f
+                    }
                 }
             }
         })
@@ -324,6 +332,8 @@ class PhotoFocusActivity : AppCompatActivity() {
                 }
 
                 pendingEntrance = true
+                // 这张视图马上会被下一张复用，先藏起来；bind() 时会重新置为 1。
+                itemView.alpha = 0f
                 markForDeletion(position, page)
 
                 overlay?.let { view ->
