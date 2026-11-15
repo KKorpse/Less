@@ -5,14 +5,11 @@ import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
 import android.content.res.ColorStateList
-import android.graphics.Bitmap
-import android.graphics.Canvas
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
 import android.view.View
 import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
-import android.widget.ImageView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
@@ -60,12 +57,11 @@ class PhotoFocusActivity : AppCompatActivity() {
     private lateinit var batchController: BatchTrashController
     private var lastDeleteItems: List<MediaItem> = emptyList()
     private var lastCleanupUris: List<Uri> = emptyList()
+    private var pendingNextReset: View? = null
     private var exitingView: View? = null
     private var swipeOffsetY = 0f
     private var swipingView: View? = null
     private var lastPreloadPosition = -1
-    private var entranceView: View? = null
-    private var pendingEntrance = false
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
     private val colorResolver = PhotoColorResolver()
@@ -186,7 +182,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val center = width / 2f
                 for (index in 0 until recyclerView.childCount) {
                     val child = recyclerView.getChildAt(index)
-                    if (child === exitingView || child === swipingView || child === entranceView) {
+                    if (child === exitingView || child === swipingView) {
                         continue
                     }
                     val card = child.findViewById<FocusCardLayout>(R.id.card) ?: continue
@@ -290,6 +286,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
                 val itemView = viewHolder.itemView
                 val card = itemView.findViewById<FocusCardLayout>(R.id.card)
+                exitingView = itemView
                 swipingView = null
                 binding.swipeGlow.animate().alpha(0f).setDuration(240L).start()
 
@@ -298,63 +295,54 @@ class PhotoFocusActivity : AppCompatActivity() {
                     return
                 }
 
-                // 先把当前这张拍成快照，盖在最上层飞走；真正的列表立刻更新，
-                // 让下一张就位，再从下方浮现——这样删除不会有“等一下才划过来”的停顿。
-                // 降采样一半再拍快照：260ms 的动画看不出差别，但能显著降低 OOM 风险。
-                val snapshot = runCatching {
-                    val scale = 0.5f
-                    val width = (card.width * scale).toInt().coerceAtLeast(1)
-                    val height = (card.height * scale).toInt().coerceAtLeast(1)
-                    Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { bitmap ->
-                        val canvas = Canvas(bitmap)
-                        canvas.scale(scale, scale)
-                        card.draw(canvas)
-                    }
-                }.getOrNull()
-                val overlay = snapshot?.let { bitmap ->
-                    ImageView(this@PhotoFocusActivity).apply {
-                        setImageBitmap(bitmap)
-                        scaleType = ImageView.ScaleType.FIT_XY
-                        alpha = card.alpha
-                        translationY = if (itemView.translationY < 0f) {
-                            itemView.translationY
-                        } else {
-                            swipeOffsetY
-                        }
-                        isClickable = false
-                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-                    }
-                }
-                if (overlay != null) {
-                    val cardLocation = IntArray(2).also { card.getLocationInWindow(it) }
-                    val rootLocation = IntArray(2).also { binding.root.getLocationInWindow(it) }
-                    binding.root.addView(
-                        overlay,
-                        FrameLayout.LayoutParams(card.width, card.height).apply {
-                            leftMargin = cardLocation[0] - rootLocation[0]
-                            topMargin = cardLocation[1] - rootLocation[1]
-                        }
-                    )
-                }
-
-                pendingEntrance = true
-                // 这张视图马上会被下一张复用，先藏起来；bind() 时会重新置为 1。
-                itemView.alpha = 0f
-                markForDeletion(position, page)
-
-                overlay?.let { view ->
-                    view.animate()
-                        .translationY(-itemView.height.toFloat() * 1.05f)
-                        .scaleX(0.45f)
-                        .scaleY(0.45f)
-                        .alpha(0f)
+                // 下一张是真实存在的视图：把它钉到中间、从下方浮起，
+                // 和当前这张的飞出同时播放。当前这张在动画结束前一直留在列表里，
+                // 所以不存在 ViewHolder 被复用成下一张的问题。
+                val nextView = binding.pager
+                    .findViewHolderForAdapterPosition(position + 1)?.itemView
+                val nextCard = nextView?.findViewById<FocusCardLayout>(R.id.card)
+                if (nextView != null && nextCard != null) {
+                    nextView.translationX = -nextView.width.toFloat()
+                    nextView.translationZ = 2f
+                    nextCard.alpha = 0f
+                    nextCard.translationY = dp(72).toFloat()
+                    nextCard.scaleX = 0.94f
+                    nextCard.scaleY = 0.94f
+                    nextCard.animate()
+                        .alpha(1f)
+                        .translationY(0f)
+                        .scaleX(1f)
+                        .scaleY(1f)
                         .setDuration(260L)
-                        .setInterpolator(DecelerateInterpolator(1.6f))
-                        .withEndAction { binding.root.removeView(view) }
+                        .setInterpolator(DecelerateInterpolator())
                         .start()
                 }
 
-
+                val startOffset = if (itemView.translationY < 0f) {
+                    itemView.translationY
+                } else {
+                    swipeOffsetY
+                }
+                card.translationY = startOffset
+                card.animate()
+                    .translationY(-itemView.height.toFloat() * 1.05f)
+                    .scaleX(0.45f)
+                    .scaleY(0.45f)
+                    .alpha(0f)
+                    .setDuration(260L)
+                    .setInterpolator(DecelerateInterpolator(1.6f))
+                    .withEndAction {
+                        if (exitingView === itemView) {
+                            // 动画结束再移除数据，此时下一张已经在中间完全显示。
+                            exitingView = null
+                            pendingNextReset = nextView
+                            markForDeletion(position, page)
+                            card.translationY = 0f
+                            card.scaleX = 1f
+                            card.scaleY = 1f
+                        }
+                    }
+                    .start()
             }
 
             override fun clearView(
@@ -406,9 +394,17 @@ class PhotoFocusActivity : AppCompatActivity() {
                             }
                         }
                         updateCurrent()
-                        if (pendingEntrance) {
-                            pendingEntrance = false
-                            binding.pager.post { playEntranceFromBelow() }
+                        // 列表已经更新、下一张已经就位于中心，这时再清掉临时位移。
+                        pendingNextReset?.let { view ->
+                            view.translationX = 0f
+                            view.translationZ = 0f
+                            view.findViewById<FocusCardLayout>(R.id.card)?.let {
+                                it.alpha = 1f
+                                it.translationY = 0f
+                                it.scaleX = 1f
+                                it.scaleY = 1f
+                            }
+                            pendingNextReset = null
                         }
                     }
                 }
@@ -470,30 +466,6 @@ class PhotoFocusActivity : AppCompatActivity() {
                 )
             }
         }
-    }
-
-    /** 新就位的一张从下方翻上来。 */
-    private fun playEntranceFromBelow() {
-        val position = currentPosition()
-        if (position == RecyclerView.NO_POSITION) return
-        val holder = binding.pager.findViewHolderForAdapterPosition(position) ?: return
-        val card = holder.itemView.findViewById<FocusCardLayout>(R.id.card) ?: return
-        entranceView = holder.itemView
-        card.alpha = 0f
-        card.translationY = dp(60).toFloat()
-        card.scaleX = 0.94f
-        card.scaleY = 0.94f
-        card.animate()
-            .alpha(1f)
-            .translationY(0f)
-            .scaleX(1f)
-            .scaleY(1f)
-            .setDuration(240L)
-            .setInterpolator(DecelerateInterpolator())
-            .withEndAction {
-                if (entranceView === holder.itemView) entranceView = null
-            }
-            .start()
     }
 
     private fun updateChrome(page: FocusPage?) {
