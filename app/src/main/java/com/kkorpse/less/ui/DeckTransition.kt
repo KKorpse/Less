@@ -46,7 +46,8 @@ object DeckTransition {
         p: Float,
         vertical: Boolean,
         liftPx: Float,
-        opaque: Boolean
+        opaque: Boolean,
+        fromScale: Float = MIN_SCALE
     ) {
         view.translationZ = 0f
         view.translationX = -view.left.toFloat()
@@ -56,7 +57,7 @@ object DeckTransition {
         } else {
             view.translationY = (1f - p) * liftPx
         }
-        val scale = MIN_SCALE + (1f - MIN_SCALE) * p
+        val scale = fromScale + (1f - fromScale) * p
         card.scaleX = scale
         card.scaleY = scale
         card.alpha = if (opaque) 1f else p.coerceIn(0f, 1f)

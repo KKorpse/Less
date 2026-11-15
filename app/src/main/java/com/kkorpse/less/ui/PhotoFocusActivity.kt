@@ -246,6 +246,8 @@ class PhotoFocusActivity : AppCompatActivity() {
                 if (card != null) {
                     if (isCurrentlyActive && dY < 0f) {
                         swipingView = itemView
+                        // 竖直拖动期间不要让它同时带动横向翻页
+                        recyclerView.stopScroll()
                         swipeOffsetY = dY
                         // 以「触发删除的距离」为 1，红光与缩小同步渐变。
                         val progress = (-dY / (itemView.height * SWIPE_THRESHOLD))
@@ -291,8 +293,12 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val nextView = binding.pager
                     .findViewHolderForAdapterPosition(position + 1)?.itemView
                 val nextCard = nextView?.findViewById<FocusCardLayout>(R.id.card)
-                val lift = dp(72).toFloat()
-
+                if (nextView == null || nextCard == null) {
+                    // 没有下一张可露出（最后一张）：直接移除，不播放滑走动画。
+                    exitingView = null
+                    markForDeletion(position, page)
+                    return
+                }
                 // 和横向翻页完全同一套模型，只是把方向换成纵向。
                 DeckTransition.animate(
                     from = 0f,
@@ -305,8 +311,9 @@ class PhotoFocusActivity : AppCompatActivity() {
                                 nextCard,
                                 p,
                                 vertical = true,
-                                liftPx = lift,
-                                opaque = true
+                                liftPx = 0f,
+                                opaque = true,
+                                fromScale = 1f
                             )
                         }
                     },
