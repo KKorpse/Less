@@ -501,12 +501,12 @@ class PhotoFocusActivity : AppCompatActivity() {
             view.translationY = 0f
             view.translationZ = 0f
             view.findViewById<FocusCardLayout>(R.id.card)?.let {
-                // 不做位移/缩放/透明度：保持完全不透明、原位铺着，
-                // 当前页一往上走就直接露出它（和左滑"两张同时在屏幕上"一致）。
-                it.alpha = 1f
-                it.translationY = 0f
-                it.scaleX = 1f
-                it.scaleY = 1f
+                // 和左滑完全相同的入场参数：72dp 浮起 + 0.94→1 + alpha 0→1
+                it.alpha = p
+                it.translationY = (1f - p) * dp(72)
+                val scale = 0.94f + 0.06f * p
+                it.scaleX = scale
+                it.scaleY = scale
             }
             view.findViewById<View>(R.id.revealScrim)?.alpha = 0f
         }
