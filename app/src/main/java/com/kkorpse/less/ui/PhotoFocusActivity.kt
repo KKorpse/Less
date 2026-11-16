@@ -308,6 +308,9 @@ class PhotoFocusActivity : AppCompatActivity() {
                         }
                         swipeOffsetY = dY
                         deleteDragPx = (-dY).coerceAtLeast(0f)
+                        // 位移统一由我们设置（ITH 不再负责），松手后同一份进度接着走。
+                        itemView.translationX = 0f
+                        itemView.translationY = dY
                         // 拖动阶段就让下一张跟着手指"由暗变亮 + 浮起"，不等松手。
                         childAtPosition(currentPosition() + 1)?.let { nextView ->
                             val nextCard = nextView.findViewById<FocusCardLayout>(R.id.card)
@@ -342,12 +345,13 @@ class PhotoFocusActivity : AppCompatActivity() {
                         if (!isCurrentlyActive) binding.swipeGlow.alpha = 0f
                     }
                 }
+                // 传 0：不让 ItemTouchHelper 自己改 translation，避免和我们的进度打架。
                 super.onChildDraw(
                     canvas,
                     recyclerView,
                     viewHolder,
-                    dX,
-                    dY,
+                    0f,
+                    0f,
                     actionState,
                     isCurrentlyActive
                 )
@@ -385,6 +389,15 @@ class PhotoFocusActivity : AppCompatActivity() {
 
                 deleteAnimating = true
                 exitingView = itemView
+                // 立刻接管：把位移写回当前进度，避免 ITH 清理时归零那一帧。
+                itemView.translationX = 0f
+                itemView.translationY = -startP * height
+                itemView.post {
+                    if (deleteAnimating) {
+                        itemView.translationX = 0f
+                        itemView.translationY = -startP * height
+                    }
+                }
                 DeckTransition.animate(
                     from = startP,
                     to = 1f,
@@ -427,7 +440,15 @@ class PhotoFocusActivity : AppCompatActivity() {
                     dragNextPinned = false
                 }
 
-                if (viewHolder.itemView !== exitingView) swipingView = null
+                if (viewHolder.itemView !== exitingView) {
+                    swipingView = null
+                    // 没到阈值就松手：自己把位移弹回 0（ITH 不再负责位移）。
+                    viewHolder.itemView.animate()
+                        .translationY(0f)
+                        .translationX(0f)
+                        .setDuration(160L)
+                        .start()
+                }
                 // 正在播放退场动画的卡片不要被 ItemTouchHelper 重置回原状。
                 if (viewHolder.itemView === exitingView) return
                 viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)?.let {
