@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.46 — 2026-11-15
+
+- 卡死真正的修法：滚动锁移到 LayoutManager（`scrollHorizontallyBy` 返回 0），不再拦截 RecyclerView 的触摸事件——这样 ItemTouchHelper 能持续收到 MOVE/UP，不会拖到一半断掉。
+- 拖动开始时先 `scrollBy(1,0)` 再上锁，避免锁把预布局也挡住。
+
 ## 2.2.45 — 2026-11-15
 
 - 修复上滑卡死：`LockableRecyclerView` 锁定时必须「接住」事件（返回 true）而不是让给子 View，否则 ItemTouchHelper 收不到后续事件、拖到一半断掉且锁解不开。另在 `onPause` 清理手势状态，避免离开页面后锁残留。

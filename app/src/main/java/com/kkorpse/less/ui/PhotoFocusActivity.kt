@@ -313,8 +313,9 @@ class PhotoFocusActivity : AppCompatActivity() {
                         // 这样手指往上拖的过程中，下面就一直是完整的那张。
                         if (!dragPreAttached) {
                             dragPreAttached = true
-                            binding.pager.horizontalScrollLocked = true
+                            // 先滚 1px 把下一张布局出来，再上锁（锁住后 scrollBy 会被忽略）
                             recyclerView.scrollBy(1, 0)
+                            binding.pager.horizontalScrollLocked = true
                         }
                         swipeOffsetY = dY
                         // 以「触发删除的距离」为 1，红光与缩小同步渐变。
