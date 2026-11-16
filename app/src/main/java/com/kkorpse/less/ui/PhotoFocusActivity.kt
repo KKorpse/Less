@@ -263,6 +263,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val page = adapter.currentList.getOrNull(position)
                 // 只允许当前正在看的那张上滑，避免手势落在被钉在中间的相邻页上
                 return if (pendingVerticalDelete < 0 &&
+                    binding.pager.scrollState == RecyclerView.SCROLL_STATE_IDLE &&
                     page is FocusPage.Photo &&
                     position == currentPosition()
                 ) {
@@ -306,6 +307,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                         // 这样手指往上拖的过程中，下面就一直是完整的那张。
                         if (!dragPreAttached) {
                             dragPreAttached = true
+                            binding.pager.horizontalScrollLocked = true
                             recyclerView.scrollBy(1, 0)
                         }
                         swipeOffsetY = dY
@@ -362,6 +364,10 @@ class PhotoFocusActivity : AppCompatActivity() {
                         "nextAttached=${childAtPosition(position + 1) != null}"
                 )
                 binding.pager.smoothScrollToPosition(position + 1)
+                // 兜底：如果滚动被意外打断没到 IDLE，700ms 后强制收尾，避免卡住。
+                binding.pager.postDelayed({
+                    if (pendingVerticalDelete >= 0) finishVerticalDelete(binding.pager)
+                }, 700L)
             }
 
             override fun clearView(
@@ -370,6 +376,7 @@ class PhotoFocusActivity : AppCompatActivity() {
             ) {
                 binding.swipeGlow.alpha = 0f
                 dragPreAttached = false
+                if (pendingVerticalDelete < 0) binding.pager.horizontalScrollLocked = false
                 if (viewHolder.itemView !== exitingView) swipingView = null
                 // 正在播放退场动画的卡片不要被 ItemTouchHelper 重置回原状。
                 if (viewHolder.itemView === exitingView) return
@@ -524,6 +531,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private fun finishVerticalDelete(recyclerView: RecyclerView) {
         val position = pendingVerticalDelete
         pendingVerticalDelete = -1
+        binding.pager.horizontalScrollLocked = false
         val outgoing = binding.pager.findViewHolderForAdapterPosition(position)?.itemView
         val incoming = binding.pager.findViewHolderForAdapterPosition(position + 1)?.itemView
         val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo

@@ -6,7 +6,7 @@
     android:layout_height="match_parent"
     android:background="@color/black">
 
-    <androidx.recyclerview.widget.RecyclerView
+    <com.kkorpse.less.ui.LockableRecyclerView
         android:id="@+id/pager"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
