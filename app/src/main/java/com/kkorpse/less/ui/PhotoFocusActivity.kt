@@ -64,6 +64,8 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var lastPreloadPosition = -1
     private var pendingVerticalDelete = -1
     private var dragPreAttached = false
+    private var dragNextPinned = false
+    private var deleteDragPx = 0f
     private val velocityTracker = android.view.VelocityTracker.obtain()
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
@@ -322,6 +324,24 @@ class PhotoFocusActivity : AppCompatActivity() {
                             recyclerView.scrollBy(1, 0)
                         }
                         swipeOffsetY = dY
+                        deleteDragPx = (-dY).coerceAtLeast(0f)
+                        // 拖动阶段就让下一张跟着手指"由暗变亮 + 浮起"，不等松手。
+                        childAtPosition(currentPosition() + 1)?.let { nextView ->
+                            val nextCard = nextView.findViewById<FocusCardLayout>(R.id.card)
+                            if (nextCard != null) {
+                                if (!dragNextPinned) {
+                                    nextView.translationX = -nextView.left.toFloat()
+                                    nextView.translationZ = 0f
+                                    dragNextPinned = true
+                                }
+                                val dp = (deleteDragPx / itemView.height).coerceIn(0f, 1f)
+                                nextCard.alpha = dp
+                                nextCard.translationY = (1f - dp) * dp72()
+                                val nextScale = 0.94f + 0.06f * dp
+                                nextCard.scaleX = nextScale
+                                nextCard.scaleY = nextScale
+                            }
+                        }
                         // 以「触发删除的距离」为 1，红光与缩小同步渐变。
                         val progress = (-dY / (itemView.height * SWIPE_THRESHOLD))
                             .coerceIn(0f, 1f)
@@ -387,6 +407,20 @@ class PhotoFocusActivity : AppCompatActivity() {
             ) {
                 binding.swipeGlow.alpha = 0f
                 dragPreAttached = false
+                if (dragNextPinned && pendingVerticalDelete < 0) {
+                    childAtPosition(currentPosition() + 1)?.let { nextView ->
+                        nextView.translationX = 0f
+                        nextView.translationZ = 0f
+                        nextView.findViewById<FocusCardLayout>(R.id.card)?.let {
+                            it.alpha = 1f
+                            it.translationY = 0f
+                            it.scaleX = 1f
+                            it.scaleY = 1f
+                        }
+                    }
+                    dragNextPinned = false
+                }
+                if (pendingVerticalDelete < 0) deleteDragPx = 0f
                 if (viewHolder.itemView !== exitingView) swipingView = null
                 // 正在播放退场动画的卡片不要被 ItemTouchHelper 重置回原状。
                 if (viewHolder.itemView === exitingView) return
@@ -508,9 +542,14 @@ class PhotoFocusActivity : AppCompatActivity() {
             .findViewHolderForAdapterPosition(pendingVerticalDelete + 1)?.itemView
             ?: childAtPosition(pendingVerticalDelete + 1)
 
-        val p = (-outgoing.left / width).coerceIn(0f, 1f)
+        // 滚动进度 s：0 → 1；把拖动阶段已经走的距离接上去，避免松手瞬间重置。
+        val s = (-outgoing.left / width).coerceIn(0f, 1f)
+        val fullHeight = outgoing.height.toFloat().coerceAtLeast(1f)
+        val startPx = deleteDragPx.coerceIn(0f, fullHeight)
+        val traveled = startPx + s * (fullHeight - startPx)
+        val p = (traveled / fullHeight).coerceIn(0f, 1f)
         outgoing.translationX = -outgoing.left.toFloat()
-        outgoing.translationY = -p * outgoing.height
+        outgoing.translationY = -traveled
         outgoing.translationZ = 2f
 
         incoming?.let { view ->
@@ -529,6 +568,8 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
     }
 
+    private fun dp72(): Float = dp(72).toFloat()
+
     private fun childAtPosition(position: Int): View? {
         for (index in 0 until binding.pager.childCount) {
             val child = binding.pager.getChildAt(index)
@@ -541,6 +582,8 @@ class PhotoFocusActivity : AppCompatActivity() {
     private fun finishVerticalDelete(recyclerView: RecyclerView) {
         val position = pendingVerticalDelete
         pendingVerticalDelete = -1
+        dragNextPinned = false
+        deleteDragPx = 0f
         val outgoing = binding.pager.findViewHolderForAdapterPosition(position)?.itemView
         val incoming = binding.pager.findViewHolderForAdapterPosition(position + 1)?.itemView
         val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo
