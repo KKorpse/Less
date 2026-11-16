@@ -13,16 +13,6 @@ import androidx.recyclerview.widget.RecyclerView
 class PeekingLinearLayoutManager(context: Context) :
     LinearLayoutManager(context, HORIZONTAL, false) {
 
-    var scrollLocked: Boolean = false
-
     override fun getExtraLayoutSpace(state: RecyclerView.State?): Int = width
 
-    override fun scrollHorizontallyBy(
-        dx: Int,
-        recycler: RecyclerView.Recycler,
-        state: RecyclerView.State
-    ): Int {
-        if (scrollLocked) return 0
-        return super.scrollHorizontallyBy(dx, recycler, state)
-    }
 }

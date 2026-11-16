@@ -140,7 +140,6 @@ class PhotoFocusActivity : AppCompatActivity() {
         runCatching {
             if (pendingVerticalDelete >= 0) finishVerticalDelete(binding.pager)
         }
-        binding.pager.horizontalScrollLocked = false
         dragPreAttached = false
         // 只记录从首页进入的组；收藏页进来的会话不覆盖首页进度。
         if (!PhotoFocusSession.autoNextGroup) return
@@ -187,6 +186,12 @@ class PhotoFocusActivity : AppCompatActivity() {
                     android.view.MotionEvent.ACTION_DOWN -> {
                         velocityTracker.clear()
                         velocityTracker.addMovement(e)
+                        // 删除收尾滚动期间用户又碰屏幕：直接收尾，避免滚动被打断后状态卡住。
+                        if (pendingVerticalDelete >= 0) {
+                            binding.pager.post {
+                                if (pendingVerticalDelete >= 0) finishVerticalDelete(binding.pager)
+                            }
+                        }
                     }
                     android.view.MotionEvent.ACTION_MOVE -> velocityTracker.addMovement(e)
                     android.view.MotionEvent.ACTION_UP,
@@ -315,7 +320,6 @@ class PhotoFocusActivity : AppCompatActivity() {
                             dragPreAttached = true
                             // 先滚 1px 把下一张布局出来，再上锁（锁住后 scrollBy 会被忽略）
                             recyclerView.scrollBy(1, 0)
-                            binding.pager.horizontalScrollLocked = true
                         }
                         swipeOffsetY = dY
                         // 以「触发删除的距离」为 1，红光与缩小同步渐变。
@@ -383,7 +387,6 @@ class PhotoFocusActivity : AppCompatActivity() {
             ) {
                 binding.swipeGlow.alpha = 0f
                 dragPreAttached = false
-                if (pendingVerticalDelete < 0) binding.pager.horizontalScrollLocked = false
                 if (viewHolder.itemView !== exitingView) swipingView = null
                 // 正在播放退场动画的卡片不要被 ItemTouchHelper 重置回原状。
                 if (viewHolder.itemView === exitingView) return
@@ -538,7 +541,6 @@ class PhotoFocusActivity : AppCompatActivity() {
     private fun finishVerticalDelete(recyclerView: RecyclerView) {
         val position = pendingVerticalDelete
         pendingVerticalDelete = -1
-        binding.pager.horizontalScrollLocked = false
         val outgoing = binding.pager.findViewHolderForAdapterPosition(position)?.itemView
         val incoming = binding.pager.findViewHolderForAdapterPosition(position + 1)?.itemView
         val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo

@@ -1,5 +1,10 @@
 # Changelog
 
+## 2.2.47 — 2026-11-15
+
+- 彻底去掉手势锁：ItemTouchHelper 一旦接管，RecyclerView 本身就不会再滚动，不需要额外锁；锁反而会把 `smoothScrollToPosition` 也挡住并导致卡死。
+- 保留两道保险：横向滚动/惯性未停时不允许起竖直拖动；删除收尾滚动期间用户一碰屏幕就立即收尾。
+
 ## 2.2.46 — 2026-11-15
 
 - 卡死真正的修法：滚动锁移到 LayoutManager（`scrollHorizontallyBy` 返回 0），不再拦截 RecyclerView 的触摸事件——这样 ItemTouchHelper 能持续收到 MOVE/UP，不会拖到一半断掉。
