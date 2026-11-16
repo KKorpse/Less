@@ -346,6 +346,14 @@ class PhotoFocusActivity : AppCompatActivity() {
                 // 上滑 = 让 RecyclerView 往前滚一页，纵向视觉在 onScrolled 里绘制。
                 // 这样进度、时长、吸附和左滑完全同一套机制。
                 pendingVerticalDelete = position
+                // 先滚 1px：强制 RecyclerView 把相邻页布局/attach 出来，
+                // 否则动画开始时下一张可能还不存在（整片空白）。
+                binding.pager.scrollBy(1, 0)
+                com.kkorpse.less.Breadcrumbs.step(
+                    this@PhotoFocusActivity,
+                    "delete pos=$position childCount=${binding.pager.childCount} " +
+                        "nextAttached=${childAtPosition(position + 1) != null}"
+                )
                 binding.pager.smoothScrollToPosition(position + 1)
             }
 
