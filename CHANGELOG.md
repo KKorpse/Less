@@ -1,5 +1,12 @@
 # Changelog
 
+## 2.2.54 — 2026-11-16
+
+- 收藏副本不再顶到系统相册最前面：复制完成后把副本的时间对齐原图——
+  - 真实文件 mtime 设为原图时间（`File.setLastModified`），扫描后的 `DATE_MODIFIED` 不再是「现在」；
+  - 再把媒体行的 `DATE_TAKEN` / `DATE_MODIFIED` 写回原图时间（`DATE_ADDED` 是派生列，系统不接受写入，仍是最新）。
+- 没有 EXIF 的图（截图、保存图）以前在系统相册里必然排最前，现在会回到原图所属的日期位置。
+
 ## 2.2.53 — 2026-11-16
 
 - 上滑删除改成一套逻辑：不再使用 `ItemTouchHelper`，新增 `VerticalDeckRecyclerView` 自己接管竖直手势（方向判定、位移、速度），拖动和收尾共用同一个进度 `p`，渲染只走 `applyDeck(p)`。

@@ -51,6 +51,10 @@ object FolderFavorites {
             return null
         }
 
+        // 副本的真实修改时间先对齐原图：入库时间改不了，但 mtime 可以，
+        // 这样系统相册扫描后拿到的 DATE_MODIFIED 不是「现在」。
+        applyFileTime(context, target, item.dateMillis)
+
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             runCatching {
                 resolver.update(
@@ -61,7 +65,34 @@ object FolderFavorites {
                 )
             }
         }
+
+        // 扫描结束后再写拍摄时间：没有 EXIF 的图扫描不会给 DATE_TAKEN，
+        // 这里补成原图时间，相册才不会把副本排到最前面。
+        applyRowTime(resolver, target, item.dateMillis)
         return target
+    }
+
+    /** 直接改副本文件的 mtime（我们自己的文件，无需授权）。 */
+    private fun applyFileTime(context: Context, uri: Uri, dateMillis: Long) {
+        if (dateMillis <= 0L) return
+        runCatching {
+            val path = context.contentResolver
+                .query(uri, arrayOf(MediaStore.MediaColumns.DATA), null, null, null)
+                ?.use { cursor -> if (cursor.moveToFirst()) cursor.getString(0) else null }
+            if (!path.isNullOrBlank()) {
+                java.io.File(path).setLastModified(dateMillis)
+            }
+        }
+    }
+
+    /** 把媒体行的时间写回原图时间：DATE_TAKEN（毫秒）+ DATE_MODIFIED（秒）。 */
+    private fun applyRowTime(resolver: android.content.ContentResolver, uri: Uri, dateMillis: Long) {
+        if (dateMillis <= 0L) return
+        val values = ContentValues().apply {
+            put(MediaStore.MediaColumns.DATE_TAKEN, dateMillis)
+            runCatching { put(MediaStore.MediaColumns.DATE_MODIFIED, dateMillis / 1000L) }
+        }
+        runCatching { resolver.update(uri, values, null, null) }
     }
 
     /** 删除我们自己创建的副本（自己的文件，不需要授权）。 */
