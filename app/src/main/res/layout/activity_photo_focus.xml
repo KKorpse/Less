@@ -6,14 +6,12 @@
     android:layout_height="match_parent"
     android:background="@color/black">
 
-    <com.kkorpse.less.ui.VerticalDeckRecyclerView
-        android:id="@+id/pager"
+    <com.kkorpse.less.ui.FocusDeckView
+        android:id="@+id/deck"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:clipChildren="false"
-        android:clipToPadding="false"
-        android:overScrollMode="never"
-        android:scrollbars="none" />
+        android:clipToPadding="false" />
 
     <View
         android:layout_width="match_parent"

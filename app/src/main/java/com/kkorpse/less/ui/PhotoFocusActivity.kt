@@ -7,8 +7,6 @@ import android.content.pm.PackageManager
 import android.content.res.ColorStateList
 import android.graphics.drawable.GradientDrawable
 import android.os.Bundle
-import android.view.View
-import android.view.animation.DecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
@@ -23,9 +21,6 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.recyclerview.widget.PagerSnapHelper
-import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
@@ -47,33 +42,23 @@ class PhotoFocusActivity : AppCompatActivity() {
     companion object {
         /** 上滑到卡片高度的 8% 就算要删除，手指不松开时表现为顶部红光逐渐亮起。 */
         private const val SWIPE_THRESHOLD = 0.08f
-        /** 上甩速度阈值（px/s），超过就执行删除。 */
-        private const val FLING_VELOCITY = 900f
     }
 
     private lateinit var binding: ActivityPhotoFocusBinding
     private val viewModel: PhotoFocusViewModel by viewModels()
 
-    private lateinit var adapter: PhotoFocusAdapter
-    private lateinit var layoutManager: LinearLayoutManager
     private lateinit var batchController: BatchTrashController
     private var lastDeleteItems: List<MediaItem> = emptyList()
     private var lastCleanupUris: List<Uri> = emptyList()
-    private var pendingNextReset: View? = null
     private var expandRequesting = false
     private var lastPreloadPosition = -1
-    private var deckAnimator: android.animation.ValueAnimator? = null
-    /** 上滑删除的唯一进度：拖动和收尾动画都写它。 */
-    private var deckProgress = 0f
-    /** 打断收尾动画重新拖动时的起始进度。 */
-    private var deckResume = 0f
+    private var pages: List<FocusPage> = emptyList()
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
     private val colorResolver = PhotoColorResolver()
 
     private var initialScrollDone = false
     private var lastGeneration = 0
-    private var pendingScrollIndex: Int? = null
     private var pendingScrollOriginalIndex: Int? = null
     private var locationJob: Job? = null
     private var colorJob: Job? = null
@@ -99,21 +84,38 @@ class PhotoFocusActivity : AppCompatActivity() {
 
         viewModel.initialize(session.items, session.startIndex, session.autoNextGroup)
         val app = application as LessApp
-        adapter = PhotoFocusAdapter(
-            doubleTapAction = app.preferences.doubleTapAction,
-            onFavorite = ::toggleFavorite,
-            onTogglePending = { entry -> viewModel.togglePendingSelection(entry.item) },
-            onConfirmDelete = ::requestBatchDelete,
-            onDiscardGroup = ::discardGroup
-        )
+        binding.deck.setPhotoActions(app.preferences.doubleTapAction, ::toggleFavorite)
+        binding.deck.setSummaryCallbacks(object : DeckCardView.SummaryCallbacks {
+            override fun onTogglePending(entry: PendingDelete) {
+                viewModel.togglePendingSelection(entry.item)
+            }
 
-        layoutManager = PeekingLinearLayoutManager(this)
-        binding.pager.layoutManager = layoutManager
-        binding.pager.adapter = adapter
-        binding.pager.itemAnimator = null
-        binding.pager.setHasFixedSize(true)
-        binding.pager.setItemViewCacheSize(3)
-        PagerSnapHelper().attachToRecyclerView(binding.pager)
+            override fun onConfirmDelete() = requestBatchDelete()
+
+            override fun onDiscardGroup() = discardGroup()
+        })
+        binding.deck.listener = object : FocusDeckView.Listener {
+            override fun onPageSettled(position: Int) {
+                viewModel.currentIndex = position
+                updateChrome(currentPage())
+                if (position != lastPreloadPosition) {
+                    lastPreloadPosition = position
+                    preloadAround(position)
+                }
+                (currentPage() as? FocusPage.Photo)?.let {
+                    app.browseStore.markViewed(it.item.uri, false)
+                }
+            }
+
+            override fun onDeleteCommitted(page: FocusPage.Photo) {
+                markForDeletion(page)
+            }
+
+            override fun onDeleteProgress(progress: Float) {
+                binding.swipeGlow.alpha =
+                    (progress / SWIPE_THRESHOLD).coerceIn(0f, 1f) * 0.9f
+            }
+        }
 
         WindowCompat.getInsetsController(window, binding.root).apply {
             isAppearanceLightStatusBars = false
@@ -122,7 +124,6 @@ class PhotoFocusActivity : AppCompatActivity() {
 
         setupInsets()
         setupActions()
-        setupDeck()
 
         batchController = BatchTrashController(this, this) { trash, success ->
             handleBatchResult(trash, success)
@@ -138,10 +139,6 @@ class PhotoFocusActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // 离开页面时把收尾动画停掉，避免回到页面时卡片停在半路。
-        deckAnimator?.cancel()
-        deckAnimator = null
-        deckProgress = 0f
         // 只记录从首页进入的组；收藏页进来的会话不覆盖首页进度。
         if (!PhotoFocusSession.autoNextGroup) return
         val app = application as LessApp
@@ -152,6 +149,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     override fun onDestroy() {
         locationJob?.cancel()
         colorJob?.cancel()
+        if (this::binding.isInitialized) binding.deck.dispose()
         super.onDestroy()
     }
 
@@ -168,7 +166,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 bars.bottom
             val contentTop = bars.top + dp(8)
             val contentBottom = bars.bottom + dp(72)
-            binding.pager.post { adapter.setContentInsets(contentTop, contentBottom) }
+            binding.deck.setContentInsets(contentTop, contentBottom)
             insets
         }
     }
@@ -181,263 +179,62 @@ class PhotoFocusActivity : AppCompatActivity() {
         binding.undoButton.setOnClickListener { undoLastMark() }
         binding.infoButton.setOnClickListener { showPhotoInfo() }
         binding.expandButton.setOnClickListener { expandCurrent() }
-        binding.pager.addOnScrollListener(object : RecyclerView.OnScrollListener() {
-            override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
-                if (newState == RecyclerView.SCROLL_STATE_IDLE) {
-                    updateCurrent()
-                    // 停止滚动后把不是当前页的子项收回原位：否则它们被我们钉在中间，
-                    // 触摸命中时（findChildViewUnder 从后往前找）会抢到手势，导致删错图。
-                    val current = currentPosition()
-                    for (index in 0 until recyclerView.childCount) {
-                        val child = recyclerView.getChildAt(index)
-                        if (recyclerView.getChildAdapterPosition(child) != current) {
-                            child.translationX = 0f
-                            child.translationZ = 0f
-                            child.findViewById<FocusCardLayout>(R.id.card)?.let {
-                                it.alpha = 1f
-                                it.translationY = 0f
-                                it.scaleX = 1f
-                                it.scaleY = 1f
-                            }
-                        }
-                    }
-                }
-            }
-
-            override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                // 横向翻页走同一套发牌模型：当前页随手指横向滑走，
-                // 后面那张钉到中间、从下方浮起并放大。
-                val width = recyclerView.width.toFloat().coerceAtLeast(1f)
-                val center = width / 2f
-                for (index in 0 until recyclerView.childCount) {
-                    val child = recyclerView.getChildAt(index)
-                    val card = child.findViewById<FocusCardLayout>(R.id.card) ?: continue
-                    val childCenter = (child.left + child.right) / 2f
-                    val offset = ((childCenter - center) / width).coerceIn(-1f, 1f)
-                    if (offset > 0f) {
-                        DeckTransition.applyIncoming(
-                            child,
-                            card,
-                            p = 1f - offset,
-                            vertical = false,
-                            liftPx = dp(72).toFloat(),
-                            opaque = false
-                        )
-                    } else {
-                        DeckTransition.applyOutgoing(child, card, -offset, vertical = false)
-                    }
-                }
-            }
-        })
-    }
-
-    /**
-     * 竖直上滑删除：只有一份进度 p。
-     * 拖动时 p 由手指决定，松手后 p 由动画走到 1（删除）或 0（回弹），
-     * 渲染始终走同一个 applyDeck(p)，所以不存在两段动画。
-     */
-    private fun setupDeck() {
-        binding.pager.listener = object : VerticalDeckRecyclerView.Listener {
-            override fun onDeckDragStart() {
-                // 收尾动画还没走完又按下：停在这里，从当前进度接着算，不回跳。
-                deckAnimator?.cancel()
-                deckAnimator = null
-                deckResume = deckProgress
-            }
-
-            override fun onDeckDrag(progress: Float, dy: Float) {
-                val height = binding.pager.height.coerceAtLeast(1).toFloat()
-                val p = (deckResume + dy / height).coerceIn(0f, 1f)
-                applyDeck(p)
-                val glow = (p / SWIPE_THRESHOLD).coerceIn(0f, 1f)
-                binding.swipeGlow.alpha = glow * 0.9f
-            }
-
-            override fun onDeckRelease(progress: Float, velocityY: Float) {
-                settleDeck(deckProgress, velocityY)
-            }
-        }
-    }
-
-    private fun applyDeck(p: Float) {
-        deckProgress = p
-        val position = currentPosition()
-        if (position == RecyclerView.NO_POSITION) return
-        val itemView = binding.pager.findViewHolderForAdapterPosition(position)?.itemView ?: return
-        val card = itemView.findViewById<FocusCardLayout>(R.id.card) ?: return
-
-        DeckTransition.applyOutgoing(itemView, card, p, vertical = true)
-
-        childAtPosition(position + 1)?.let { nextView ->
-            nextView.translationX = -nextView.left.toFloat()
-            nextView.translationZ = 0f
-            nextView.findViewById<FocusCardLayout>(R.id.card)?.let { nextCard ->
-                DeckTransition.applyIncoming(
-                    nextView,
-                    nextCard,
-                    p,
-                    vertical = true,
-                    liftPx = dp72(),
-                    opaque = false,
-                    fromScale = 0.94f
-                )
-            }
-        }
-    }
-
-    private fun settleDeck(progress: Float, velocityY: Float) {
-        val commit = progress >= SWIPE_THRESHOLD || velocityY < -FLING_VELOCITY
-        val target = if (commit) 1f else 0f
-        val height = binding.pager.height.coerceAtLeast(1).toFloat()
-        val distance = (kotlin.math.abs(target - progress) * height).toInt()
-        deckAnimator?.cancel()
-        deckAnimator = DeckTransition.animate(
-            from = progress,
-            to = target,
-            duration = decelerationDuration(distance),
-            onUpdate = { applyDeck(it) },
-            onEnd = {
-                deckAnimator = null
-                binding.swipeGlow.animate().alpha(0f).setDuration(160L).start()
-                if (commit) {
-                    finishDeckSwipe()
-                } else {
-                    resetDeck()
-                }
-                deckProgress = 0f
-                deckResume = 0f
-            }
-        )
-    }
-
-    /** 动画走完之后才标记删除。 */
-    private fun finishDeckSwipe() {
-        val position = currentPosition()
-        if (position == RecyclerView.NO_POSITION) return
-        val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
-
-        // 先把「下一张」真正落到当前页（列表横向滚过去一屏）并同步归位变换：
-        // 否则它还带着拖动时钉住它的 translationX，数据一变就会被画到屏幕外，出现黑闪。
-        val next = childAtPosition(position + 1)
-        runCatching { binding.pager.scrollBy(binding.pager.width, 0) }
-        next?.let { view ->
-            view.translationX = 0f
-            view.translationZ = 0f
-            view.findViewById<FocusCardLayout>(R.id.card)?.let { card ->
-                DeckTransition.reset(view, card)
-            }
-        }
-
-        pendingNextReset = next
-        markForDeletion(position, page)
-    }
-
-    private fun resetDeck() {
-        val position = currentPosition()
-        if (position != RecyclerView.NO_POSITION) {
-            binding.pager.findViewHolderForAdapterPosition(position)?.itemView?.let { view ->
-                view.findViewById<FocusCardLayout>(R.id.card)?.let { card ->
-                    DeckTransition.reset(view, card)
-                }
-            }
-            childAtPosition(position + 1)?.let { view ->
-                view.translationX = 0f
-                view.translationZ = 0f
-                view.findViewById<FocusCardLayout>(R.id.card)?.let { card ->
-                    DeckTransition.reset(view, card)
-                }
-            }
-        }
-        binding.swipeGlow.alpha = 0f
     }
 
     private fun observePages() {
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                viewModel.pages.collect { pages ->
-                    adapter.submitList(pages) {
-                        if (!initialScrollDone) {
+                viewModel.pages.collect { latest ->
+                    pages = latest
+                    val index = when {
+                        !initialScrollDone -> {
                             initialScrollDone = true
                             lastGeneration = viewModel.groupGeneration
-                            scrollTo(viewModel.currentIndex)
+                            viewModel.currentIndex
                         }
-                        if (viewModel.groupGeneration != lastGeneration) {
+
+                        viewModel.groupGeneration != lastGeneration -> {
                             lastGeneration = viewModel.groupGeneration
-                            scrollTo(0)
+                            0
                         }
-                        pendingScrollIndex?.let { index ->
-                            if (pages.isNotEmpty()) {
-                                pendingScrollIndex = null
-                                scrollTo(index)
+
+                        // 撤回：回到被恢复的那张。
+                        pendingScrollOriginalIndex != null -> {
+                            val target = latest.indexOfFirst {
+                                it is FocusPage.Photo &&
+                                    it.originalIndex == pendingScrollOriginalIndex
                             }
-                        }
-                        pendingScrollOriginalIndex?.let { originalIndex ->
-                            val index = pages.indexOfFirst {
-                                it is FocusPage.Photo && it.originalIndex == originalIndex
-                            }
-                            if (index >= 0) {
+                            if (target >= 0) {
                                 pendingScrollOriginalIndex = null
-                                scrollTo(index)
+                                target
+                            } else {
+                                -1
                             }
                         }
-                        updateCurrent()
-                        // 列表已经更新、下一张已经就位于中心，这时再清掉临时位移。
-                        pendingNextReset?.let { view ->
-                            val card = view.findViewById<FocusCardLayout>(R.id.card)
-                            if (card != null) DeckTransition.reset(view, card)
-                            pendingNextReset = null
-                        }
+
+                        // 其余情况（删除、展开）：停在原来那张上。
+                        else -> -1
                     }
+                    binding.deck.submit(latest, index)
                 }
             }
         }
     }
 
-    private fun scrollTo(index: Int) {
-        if (adapter.itemCount == 0) return
-        val position = index.coerceIn(0, adapter.itemCount - 1)
-        layoutManager.scrollToPositionWithOffset(position, 0)
-        viewModel.currentIndex = position
-        binding.pager.post { updateCurrent() }
-    }
-
-    private fun currentPosition(): Int {
-        val completely = layoutManager.findFirstCompletelyVisibleItemPosition()
-        if (completely != RecyclerView.NO_POSITION) return completely
-        return layoutManager.findFirstVisibleItemPosition()
-    }
-
-    private fun currentPage(): FocusPage? {
-        val position = currentPosition()
-        if (position == RecyclerView.NO_POSITION) return null
-        return adapter.currentList.getOrNull(position)
-    }
+    private fun currentPage(): FocusPage? = pages.getOrNull(binding.deck.currentIndex)
 
     private fun currentPhoto(): MediaItem? = (currentPage() as? FocusPage.Photo)?.item
 
     private fun updateCurrent() {
-        val position = currentPosition()
-        if (position == RecyclerView.NO_POSITION) {
-            updateChrome(null)
-            return
-        }
-        viewModel.currentIndex = position
-        val page = adapter.currentList.getOrNull(position)
-        updateChrome(page)
-        if (position != lastPreloadPosition) {
-            lastPreloadPosition = position
-            preloadAround(position)
-        }
-        if (page is FocusPage.Photo) {
-            (application as LessApp).browseStore.markViewed(page.item.uri, false)
-        }
+        viewModel.currentIndex = binding.deck.currentIndex
+        updateChrome(currentPage())
     }
 
     /** 预取前后各一张，翻过去时直接命中缓存，不再等解码。 */
     private fun preloadAround(position: Int) {
         val loader = SingletonImageLoader.get(this)
         listOf(position + 1, position - 1).forEach { index ->
-            val page = adapter.currentList.getOrNull(index) as? FocusPage.Photo ?: return@forEach
+            val page = pages.getOrNull(index) as? FocusPage.Photo ?: return@forEach
             runCatching {
                 loader.enqueue(
                     ImageRequest.Builder(this)
@@ -474,28 +271,9 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
     }
 
-    private fun dp72(): Float = dp(72).toFloat()
-
-    /** 抄 LinearSmoothScroller：MILLISECONDS_PER_INCH = 25，除以 0.3356 得到减速时长。 */
-    private fun decelerationDuration(distancePx: Int): Long {
-        val densityDpi = resources.displayMetrics.densityDpi.toFloat().coerceAtLeast(1f)
-        val millisPerPixel = 25f / densityDpi
-        val linear = kotlin.math.ceil(kotlin.math.abs(distancePx) * millisPerPixel)
-        return kotlin.math.ceil(linear / 0.3356f).toLong().coerceAtLeast(1L)
-    }
-
-    private fun childAtPosition(position: Int): View? {
-        for (index in 0 until binding.pager.childCount) {
-            val child = binding.pager.getChildAt(index)
-            if (binding.pager.getChildAdapterPosition(child) == position) return child
-        }
-        return null
-    }
-
     private fun updateChrome(page: FocusPage?) {
         when (page) {
             is FocusPage.Photo -> {
-                binding.pager.deckEnabled = true
                 binding.expandButton.isVisible = canExpand()
                 binding.bottomBar.isVisible = true
                 binding.favoriteButton.isEnabled = true
@@ -507,7 +285,6 @@ class PhotoFocusActivity : AppCompatActivity() {
             }
 
             is FocusPage.Summary -> {
-                binding.pager.deckEnabled = false
                 binding.expandButton.isVisible = false
                 locationJob?.cancel()
                 binding.bottomBar.isVisible = false
@@ -517,7 +294,6 @@ class PhotoFocusActivity : AppCompatActivity() {
             }
 
             null -> {
-                binding.pager.deckEnabled = false
                 binding.expandButton.isVisible = false
                 locationJob?.cancel()
                 binding.bottomBar.isVisible = false
@@ -633,16 +409,17 @@ class PhotoFocusActivity : AppCompatActivity() {
         )
     }
 
-    private fun markForDeletion(position: Int, page: FocusPage.Photo) {
-        if (batchController.isBusy) return
-        pendingScrollIndex = position
+    private fun markForDeletion(page: FocusPage.Photo) {
+        if (batchController.isBusy) {
+            // 批量流程进行中不能再标记，把牌堆拉回真实列表，避免少显示一张。
+            binding.deck.submit(pages)
+            return
+        }
         if (viewModel.markForDeletion(page)) {
-            binding.pager.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
+            binding.deck.performHapticFeedback(android.view.HapticFeedbackConstants.VIRTUAL_KEY)
         } else {
-            pendingScrollIndex = null
-            binding.pager.post {
-                if (position < adapter.itemCount) adapter.notifyItemChanged(position)
-            }
+            // 这一组已经进了汇总/批量流程，不让再标记；把牌堆拉回当前这张。
+            binding.deck.submit(pages)
             Toast.makeText(this, R.string.summary_finish_first, Toast.LENGTH_SHORT).show()
         }
     }
