@@ -484,12 +484,15 @@ class PhotoFocusActivity : AppCompatActivity() {
             view.translationY = 0f
             view.translationZ = 0f
             view.findViewById<FocusCardLayout>(R.id.card)?.let {
+                // 和左滑一致的"从下方浮起+放大"，只是幅度更小（24dp / 0.98），
+                // 避免整页移走后上方露出一大条底色。
                 it.alpha = 1f
-                it.translationY = 0f
-                it.scaleX = 1f
-                it.scaleY = 1f
+                it.translationY = (1f - p) * dp(24)
+                val scale = 0.98f + 0.02f * p
+                it.scaleX = scale
+                it.scaleY = scale
             }
-            // 遮罩从 0.85 渐隐到 0：图片本身不动，只是由暗变亮，避免露底色。
+            // 再加一层由暗变亮的遮罩，弱化"浮现"时的边缘。
             view.findViewById<View>(R.id.revealScrim)?.alpha = (1f - p) * 0.85f
         }
     }
