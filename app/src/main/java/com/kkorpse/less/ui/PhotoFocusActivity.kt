@@ -293,6 +293,17 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val itemView = viewHolder.itemView
                 // 已经在播退场动画的卡片，不要再被重置。
                 if (itemView === exitingView) return
+                // 先让 ItemTouchHelper 走完自己的绘制（传 0，不产生位移），
+                // 再设置我们的位移；顺序反了会被它清零，表现为"不跟手"。
+                super.onChildDraw(
+                    canvas,
+                    recyclerView,
+                    viewHolder,
+                    dX,
+                    if (isCurrentlyActive) 0f else dY,
+                    actionState,
+                    isCurrentlyActive
+                )
                 val card = itemView.findViewById<FocusCardLayout>(R.id.card)
                 if (card != null) {
                     if (isCurrentlyActive && dY < 0f) {
@@ -345,16 +356,6 @@ class PhotoFocusActivity : AppCompatActivity() {
                         if (!isCurrentlyActive) binding.swipeGlow.alpha = 0f
                     }
                 }
-                // 传 0：不让 ItemTouchHelper 自己改 translation，避免和我们的进度打架。
-                super.onChildDraw(
-                    canvas,
-                    recyclerView,
-                    viewHolder,
-                    0f,
-                    0f,
-                    actionState,
-                    isCurrentlyActive
-                )
             }
 
             override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
