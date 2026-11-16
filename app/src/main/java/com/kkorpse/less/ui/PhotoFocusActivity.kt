@@ -379,9 +379,9 @@ class PhotoFocusActivity : AppCompatActivity() {
                 // 和左滑同一套参数，从拖动阶段已有的进度接着走。
                 val height = itemView.height.coerceAtLeast(1).toFloat()
                 val startP = (deleteDragPx / height).coerceIn(0f, 1f)
-                val speed = kotlin.math.abs(velocityTracker.yVelocity).coerceAtLeast(600f)
-                val duration = ((1f - startP) * height / speed * 1000f * 1.6f)
-                    .toLong().coerceIn(120L, 340L)
+                // 与 RecyclerView 的 LinearSmoothScroller 同一套时长换算：
+                // 25ms/英寸 ÷ densityDpi 得到「每像素毫秒」，再除以 0.3356 换成减速时长。
+                val duration = decelerationDuration(((1f - startP) * height).toInt())
 
                 deleteAnimating = true
                 exitingView = itemView
@@ -540,6 +540,14 @@ class PhotoFocusActivity : AppCompatActivity() {
     }
 
     private fun dp72(): Float = dp(72).toFloat()
+
+    /** 抄 LinearSmoothScroller：MILLISECONDS_PER_INCH = 25，除以 0.3356 得到减速时长。 */
+    private fun decelerationDuration(distancePx: Int): Long {
+        val densityDpi = resources.displayMetrics.densityDpi.toFloat().coerceAtLeast(1f)
+        val millisPerPixel = 25f / densityDpi
+        val linear = kotlin.math.ceil(kotlin.math.abs(distancePx) * millisPerPixel)
+        return kotlin.math.ceil(linear / 0.3356f).toLong().coerceAtLeast(1L)
+    }
 
     private fun childAtPosition(position: Int): View? {
         for (index in 0 until binding.pager.childCount) {
