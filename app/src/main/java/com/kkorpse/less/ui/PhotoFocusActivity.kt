@@ -489,6 +489,8 @@ class PhotoFocusActivity : AppCompatActivity() {
                 it.scaleX = 1f
                 it.scaleY = 1f
             }
+            // 遮罩从 0.85 渐隐到 0：图片本身不动，只是由暗变亮，避免露底色。
+            view.findViewById<View>(R.id.revealScrim)?.alpha = (1f - p) * 0.85f
         }
     }
 
@@ -510,6 +512,7 @@ class PhotoFocusActivity : AppCompatActivity() {
             it.translationX = 0f
             it.translationY = 0f
             it.translationZ = 0f
+            it.findViewById<View>(R.id.revealScrim)?.alpha = 0f
         }
 
         if (page != null) {

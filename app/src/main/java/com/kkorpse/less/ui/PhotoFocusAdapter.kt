@@ -105,6 +105,7 @@ class PhotoFocusAdapter(
             binding.card.alpha = 1f
             binding.progress.isVisible = true
             binding.error.isVisible = false
+            binding.revealScrim.alpha = 0f
             binding.photo.contentDescription = item.name
             binding.photo.setScale(1f, false)
             binding.photo.setZoomable(true)

@@ -16,6 +16,16 @@
             android:layout_height="match_parent"
             android:contentDescription="@null" />
 
+        <View
+            android:id="@+id/revealScrim"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:alpha="0"
+            android:background="#000000"
+            android:clickable="false"
+            android:focusable="false"
+            android:importantForAccessibility="no" />
+
         <ProgressBar
             android:id="@+id/progress"
             android:layout_width="28dp"
