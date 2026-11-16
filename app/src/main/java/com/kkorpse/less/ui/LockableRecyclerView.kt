@@ -24,13 +24,17 @@ class LockableRecyclerView @JvmOverloads constructor(
             if (value) stopScroll()
         }
 
+    // 注意：锁定时必须「接住」事件（返回 true），不能返回 false。
+    // 返回 false 会把事件让给子 View（PhotoView），ItemTouchHelper 拿不到后续
+    // ACTION_MOVE/UP，拖到一半就断了，锁也解不掉——表现就是上滑卡死。
     override fun onInterceptTouchEvent(e: MotionEvent): Boolean {
-        if (horizontalScrollLocked) return false
+        if (horizontalScrollLocked) return true
         return super.onInterceptTouchEvent(e)
     }
 
     override fun onTouchEvent(e: MotionEvent): Boolean {
-        if (horizontalScrollLocked) return false
+        // 接住但不滚动；ItemTouchHelper 仍然通过 OnItemTouchListener 收到事件。
+        if (horizontalScrollLocked) return true
         return super.onTouchEvent(e)
     }
 }

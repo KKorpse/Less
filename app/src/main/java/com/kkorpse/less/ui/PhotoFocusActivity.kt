@@ -136,6 +136,12 @@ class PhotoFocusActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        // 离开页面时把手势状态清干净，避免锁残留。
+        runCatching {
+            if (pendingVerticalDelete >= 0) finishVerticalDelete(binding.pager)
+        }
+        binding.pager.horizontalScrollLocked = false
+        dragPreAttached = false
         // 只记录从首页进入的组；收藏页进来的会话不覆盖首页进度。
         if (!PhotoFocusSession.autoNextGroup) return
         val app = application as LessApp
