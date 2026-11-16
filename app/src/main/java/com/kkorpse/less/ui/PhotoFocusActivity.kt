@@ -63,6 +63,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var swipingView: View? = null
     private var lastPreloadPosition = -1
     private var pendingVerticalDelete = -1
+    private var dragPreAttached = false
     private val velocityTracker = android.view.VelocityTracker.obtain()
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
@@ -301,6 +302,12 @@ class PhotoFocusActivity : AppCompatActivity() {
                         swipingView = itemView
                         // 竖直拖动期间不要让它同时带动横向翻页
                         recyclerView.stopScroll()
+                        // 拖动一开始就让 RecyclerView 把下一张布局出来（1px 不可见），
+                        // 这样手指往上拖的过程中，下面就一直是完整的那张。
+                        if (!dragPreAttached) {
+                            dragPreAttached = true
+                            recyclerView.scrollBy(1, 0)
+                        }
                         swipeOffsetY = dY
                         // 以「触发删除的距离」为 1，红光与缩小同步渐变。
                         val progress = (-dY / (itemView.height * SWIPE_THRESHOLD))
@@ -362,6 +369,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 viewHolder: RecyclerView.ViewHolder
             ) {
                 binding.swipeGlow.alpha = 0f
+                dragPreAttached = false
                 if (viewHolder.itemView !== exitingView) swipingView = null
                 // 正在播放退场动画的卡片不要被 ItemTouchHelper 重置回原状。
                 if (viewHolder.itemView === exitingView) return
