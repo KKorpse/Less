@@ -473,6 +473,7 @@ class PhotoFocusActivity : AppCompatActivity() {
             ?: return
         val incoming = binding.pager
             .findViewHolderForAdapterPosition(pendingVerticalDelete + 1)?.itemView
+            ?: childAtPosition(pendingVerticalDelete + 1)
 
         val p = (-outgoing.left / width).coerceIn(0f, 1f)
         outgoing.translationX = -outgoing.left.toFloat()
@@ -484,17 +485,23 @@ class PhotoFocusActivity : AppCompatActivity() {
             view.translationY = 0f
             view.translationZ = 0f
             view.findViewById<FocusCardLayout>(R.id.card)?.let {
-                // 和左滑一致的"从下方浮起+放大"，只是幅度更小（24dp / 0.98），
-                // 避免整页移走后上方露出一大条底色。
+                // 不做位移/缩放/透明度：保持完全不透明、原位铺着，
+                // 当前页一往上走就直接露出它（和左滑"两张同时在屏幕上"一致）。
                 it.alpha = 1f
-                it.translationY = (1f - p) * dp(24)
-                val scale = 0.98f + 0.02f * p
-                it.scaleX = scale
-                it.scaleY = scale
+                it.translationY = 0f
+                it.scaleX = 1f
+                it.scaleY = 1f
             }
-            // 再加一层由暗变亮的遮罩，弱化"浮现"时的边缘。
-            view.findViewById<View>(R.id.revealScrim)?.alpha = (1f - p) * 0.85f
+            view.findViewById<View>(R.id.revealScrim)?.alpha = 0f
         }
+    }
+
+    private fun childAtPosition(position: Int): View? {
+        for (index in 0 until binding.pager.childCount) {
+            val child = binding.pager.getChildAt(index)
+            if (binding.pager.getChildAdapterPosition(child) == position) return child
+        }
+        return null
     }
 
     /** 删除滚动结束：移除这一张，并复位临时位移。 */
