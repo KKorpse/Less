@@ -88,7 +88,16 @@ object DeckTransition {
             interpolator = DecelerateInterpolator()
             addUpdateListener { onUpdate(it.animatedValue as Float) }
             addListener(object : android.animation.AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: android.animation.Animator) = onEnd()
+                private var cancelled = false
+
+                override fun onAnimationCancel(animation: android.animation.Animator) {
+                    cancelled = true
+                }
+
+                // 被取消（用户中途重新按下）时不算走完，避免提前标记删除。
+                override fun onAnimationEnd(animation: android.animation.Animator) {
+                    if (!cancelled) onEnd()
+                }
             })
             start()
         }

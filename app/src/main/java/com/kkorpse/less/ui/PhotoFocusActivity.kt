@@ -47,6 +47,8 @@ class PhotoFocusActivity : AppCompatActivity() {
     companion object {
         /** 上滑到卡片高度的 8% 就算要删除，手指不松开时表现为顶部红光逐渐亮起。 */
         private const val SWIPE_THRESHOLD = 0.08f
+        /** 上甩速度阈值（px/s），超过就执行删除。 */
+        private const val FLING_VELOCITY = 900f
     }
 
     private lateinit var binding: ActivityPhotoFocusBinding
@@ -58,15 +60,12 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var lastDeleteItems: List<MediaItem> = emptyList()
     private var lastCleanupUris: List<Uri> = emptyList()
     private var pendingNextReset: View? = null
-    private var exitingView: View? = null
-    private var swipeOffsetY = 0f
-    private var swipingView: View? = null
     private var lastPreloadPosition = -1
-    private var deleteAnimating = false
-    private var dragPreAttached = false
-    private var dragNextPinned = false
-    private var deleteDragPx = 0f
-    private val velocityTracker = android.view.VelocityTracker.obtain()
+    private var deckAnimator: android.animation.ValueAnimator? = null
+    /** 上滑删除的唯一进度：拖动和收尾动画都写它。 */
+    private var deckProgress = 0f
+    /** 打断收尾动画重新拖动时的起始进度。 */
+    private var deckResume = 0f
     private lateinit var favoriteController: FavoriteController
     private val locationResolver = PhotoLocationResolver()
     private val colorResolver = PhotoColorResolver()
@@ -122,7 +121,7 @@ class PhotoFocusActivity : AppCompatActivity() {
 
         setupInsets()
         setupActions()
-        setupSwipe()
+        setupDeck()
 
         batchController = BatchTrashController(this, this) { trash, success ->
             handleBatchResult(trash, success)
@@ -138,8 +137,10 @@ class PhotoFocusActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
-        // 离开页面时把手势状态清干净，避免锁残留。
-        dragPreAttached = false
+        // 离开页面时把收尾动画停掉，避免回到页面时卡片停在半路。
+        deckAnimator?.cancel()
+        deckAnimator = null
+        deckProgress = 0f
         // 只记录从首页进入的组；收藏页进来的会话不覆盖首页进度。
         if (!PhotoFocusSession.autoNextGroup) return
         val app = application as LessApp
@@ -148,7 +149,6 @@ class PhotoFocusActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        runCatching { velocityTracker.recycle() }
         locationJob?.cancel()
         colorJob?.cancel()
         super.onDestroy()
@@ -177,26 +177,6 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
         binding.undoButton.setOnClickListener { undoLastMark() }
         binding.infoButton.setOnClickListener { showPhotoInfo() }
-        // 记录松手瞬间的竖直速度，用于把上滑的收尾时长按「距离 + 速度」算，
-        // 与左滑吸附（SnapHelper 同样按距离/速度决定时长）保持一致。
-        binding.pager.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
-            override fun onInterceptTouchEvent(rv: RecyclerView, e: android.view.MotionEvent): Boolean {
-                when (e.actionMasked) {
-                    android.view.MotionEvent.ACTION_DOWN -> {
-                        velocityTracker.clear()
-                        velocityTracker.addMovement(e)
-                    }
-                    android.view.MotionEvent.ACTION_MOVE -> velocityTracker.addMovement(e)
-                    android.view.MotionEvent.ACTION_UP,
-                    android.view.MotionEvent.ACTION_CANCEL -> {
-                        velocityTracker.addMovement(e)
-                        velocityTracker.computeCurrentVelocity(1000)
-                    }
-                }
-                return false
-            }
-        })
-
         binding.pager.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
@@ -206,7 +186,6 @@ class PhotoFocusActivity : AppCompatActivity() {
                     val current = currentPosition()
                     for (index in 0 until recyclerView.childCount) {
                         val child = recyclerView.getChildAt(index)
-                        if (child === exitingView) continue
                         if (recyclerView.getChildAdapterPosition(child) != current) {
                             child.translationX = 0f
                             child.translationZ = 0f
@@ -228,7 +207,6 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val center = width / 2f
                 for (index in 0 until recyclerView.childCount) {
                     val child = recyclerView.getChildAt(index)
-                    if (child === exitingView || child === swipingView) continue
                     val card = child.findViewById<FocusCardLayout>(R.id.card) ?: continue
                     val childCenter = (child.left + child.right) / 2f
                     val offset = ((childCenter - center) / width).coerceIn(-1f, 1f)
@@ -249,218 +227,124 @@ class PhotoFocusActivity : AppCompatActivity() {
         })
     }
 
-    private fun setupSwipe() {
-        val callback = object : ItemTouchHelper.SimpleCallback(0, ItemTouchHelper.UP) {
-            override fun getMovementFlags(
-                recyclerView: RecyclerView,
-                viewHolder: RecyclerView.ViewHolder
-            ): Int {
-                val position = viewHolder.bindingAdapterPosition
-                val page = adapter.currentList.getOrNull(position)
-                // 只允许当前正在看的那张上滑，避免手势落在被钉在中间的相邻页上
-                return if (!deleteAnimating &&
-                    binding.pager.scrollState == RecyclerView.SCROLL_STATE_IDLE &&
-                    page is FocusPage.Photo &&
-                    position == currentPosition()
-                ) {
-                    makeMovementFlags(0, ItemTouchHelper.UP)
-                } else {
-                    0
-                }
+    /**
+     * 竖直上滑删除：只有一份进度 p。
+     * 拖动时 p 由手指决定，松手后 p 由动画走到 1（删除）或 0（回弹），
+     * 渲染始终走同一个 applyDeck(p)，所以不存在两段动画。
+     */
+    private fun setupDeck() {
+        binding.pager.listener = object : VerticalDeckRecyclerView.Listener {
+            override fun onDeckDragStart() {
+                // 收尾动画还没走完又按下：停在这里，从当前进度接着算，不回跳。
+                deckAnimator?.cancel()
+                deckAnimator = null
+                deckResume = deckProgress
             }
 
-            override fun onMove(
-                recyclerView: RecyclerView,
-                viewHolder: RecyclerView.ViewHolder,
-                target: RecyclerView.ViewHolder
-            ): Boolean = false
-
-            override fun getSwipeThreshold(viewHolder: RecyclerView.ViewHolder): Float =
-                SWIPE_THRESHOLD
-
-            override fun getSwipeEscapeVelocity(defaultValue: Float): Float =
-                defaultValue.coerceAtMost(600f)
-
-            override fun onChildDraw(
-                canvas: android.graphics.Canvas,
-                recyclerView: RecyclerView,
-                viewHolder: RecyclerView.ViewHolder,
-                dX: Float,
-                dY: Float,
-                actionState: Int,
-                isCurrentlyActive: Boolean
-            ) {
-                val itemView = viewHolder.itemView
-                // 已经在播退场动画的卡片，不要再被重置。
-                if (itemView === exitingView) return
-                // 先让 ItemTouchHelper 走完自己的绘制（传 0，不产生位移），
-                // 再设置我们的位移；顺序反了会被它清零，表现为"不跟手"。
-                super.onChildDraw(
-                    canvas,
-                    recyclerView,
-                    viewHolder,
-                    dX,
-                    if (isCurrentlyActive) 0f else dY,
-                    actionState,
-                    isCurrentlyActive
-                )
-                val card = itemView.findViewById<FocusCardLayout>(R.id.card)
-                if (card != null) {
-                    if (isCurrentlyActive && dY < 0f) {
-                        swipingView = itemView
-                        // 竖直拖动期间不要让它同时带动横向翻页
-                        recyclerView.stopScroll()
-                        // 拖动一开始就让 RecyclerView 把下一张布局出来（1px 不可见），
-                        // 这样手指往上拖的过程中，下面就一直是完整的那张。
-                        if (!dragPreAttached) {
-                            dragPreAttached = true
-                            // 先滚 1px 把下一张布局出来，再上锁（锁住后 scrollBy 会被忽略）
-                            recyclerView.scrollBy(1, 0)
-                        }
-                        swipeOffsetY = dY
-                        deleteDragPx = (-dY).coerceAtLeast(0f)
-                        // 位移统一由我们设置（ITH 不再负责），松手后同一份进度接着走。
-                        itemView.translationX = 0f
-                        itemView.translationY = dY
-                        // 拖动阶段就让下一张跟着手指"由暗变亮 + 浮起"，不等松手。
-                        childAtPosition(currentPosition() + 1)?.let { nextView ->
-                            val nextCard = nextView.findViewById<FocusCardLayout>(R.id.card)
-                            if (nextCard != null) {
-                                if (!dragNextPinned) {
-                                    nextView.translationX = -nextView.left.toFloat()
-                                    nextView.translationZ = 0f
-                                    dragNextPinned = true
-                                }
-                                val dp = (deleteDragPx / itemView.height).coerceIn(0f, 1f)
-                                nextCard.alpha = dp
-                                nextCard.translationY = (1f - dp) * dp72()
-                                val nextScale = 0.94f + 0.06f * dp
-                                nextCard.scaleX = nextScale
-                                nextCard.scaleY = nextScale
-                            }
-                        }
-                        // 以「触发删除的距离」为 1，红光与缩小同步渐变。
-                        val progress = (-dY / (itemView.height * SWIPE_THRESHOLD))
-                            .coerceIn(0f, 1f)
-                        // 和左滑一致：实心、不缩小，只是跟着手指上移
-                        card.scaleX = 1f
-                        card.scaleY = 1f
-                        card.alpha = 1f
-                        binding.swipeGlow.alpha = progress * 0.9f
-                    } else if (itemView !== swipingView) {
-                        // 只有真正结束了手势（clearView 会清空 swipingView）才复位，
-                        // 否则松手这一帧会把卡片弹回 1x，看起来就是抖动放大。
-                        card.scaleX = 1f
-                        card.scaleY = 1f
-                        card.alpha = 1f
-                        if (!isCurrentlyActive) binding.swipeGlow.alpha = 0f
-                    }
-                }
+            override fun onDeckDrag(progress: Float, dy: Float) {
+                val height = binding.pager.height.coerceAtLeast(1).toFloat()
+                val p = (deckResume + dy / height).coerceIn(0f, 1f)
+                applyDeck(p)
+                val glow = (p / SWIPE_THRESHOLD).coerceIn(0f, 1f)
+                binding.swipeGlow.alpha = glow * 0.9f
             }
 
-            override fun onSwiped(viewHolder: RecyclerView.ViewHolder, direction: Int) {
-                val position = currentPosition().takeIf { it != RecyclerView.NO_POSITION }
-                    ?: return
-                if (deleteAnimating) return
-                val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
-
-                binding.swipeGlow.animate().alpha(0f).setDuration(200L).start()
-
-                val itemView = viewHolder.itemView
-                val card = itemView.findViewById<FocusCardLayout>(R.id.card)
-                val nextView = childAtPosition(position + 1)
-                val nextCard = nextView?.findViewById<FocusCardLayout>(R.id.card)
-                if (card == null || nextView == null || nextCard == null) {
-                    markForDeletion(position, page)
-                    return
-                }
-
-                if (!dragNextPinned) {
-                    nextView.translationX = -nextView.left.toFloat()
-                    nextView.translationZ = 0f
-                    dragNextPinned = true
-                }
-
-                // 和左滑同一套参数，从拖动阶段已有的进度接着走。
-                val height = itemView.height.coerceAtLeast(1).toFloat()
-                val startP = (deleteDragPx / height).coerceIn(0f, 1f)
-                // 与 RecyclerView 的 LinearSmoothScroller 同一套时长换算：
-                // 25ms/英寸 ÷ densityDpi 得到「每像素毫秒」，再除以 0.3356 换成减速时长。
-                val duration = decelerationDuration(((1f - startP) * height).toInt())
-
-                deleteAnimating = true
-                exitingView = itemView
-                // 立刻接管：把位移写回当前进度，避免 ITH 清理时归零那一帧。
-                itemView.translationX = 0f
-                itemView.translationY = -startP * height
-                itemView.post {
-                    if (deleteAnimating) {
-                        itemView.translationX = 0f
-                        itemView.translationY = -startP * height
-                    }
-                }
-                DeckTransition.animate(
-                    from = startP,
-                    to = 1f,
-                    duration = duration,
-                    onUpdate = { p ->
-                        DeckTransition.applyOutgoing(itemView, card, p, vertical = true)
-                        DeckTransition.applyIncoming(
-                            nextView,
-                            nextCard,
-                            p,
-                            vertical = true,
-                            liftPx = dp72(),
-                            opaque = false,
-                            fromScale = 0.94f
-                        )
-                    },
-                    onEnd = {
-                        removeWhenReady(position, page, itemView, nextView, nextCard)
-                    }
-                )
-            }
-
-            override fun clearView(
-                recyclerView: RecyclerView,
-                viewHolder: RecyclerView.ViewHolder
-            ) {
-                binding.swipeGlow.alpha = 0f
-                dragPreAttached = false
-                if (dragNextPinned) {
-                    childAtPosition(currentPosition() + 1)?.let { nextView ->
-                        nextView.translationX = 0f
-                        nextView.translationZ = 0f
-                        nextView.findViewById<FocusCardLayout>(R.id.card)?.let {
-                            it.alpha = 1f
-                            it.translationY = 0f
-                            it.scaleX = 1f
-                            it.scaleY = 1f
-                        }
-                    }
-                    dragNextPinned = false
-                }
-
-                if (viewHolder.itemView !== exitingView) {
-                    swipingView = null
-                    // 没到阈值就松手：自己把位移弹回 0（ITH 不再负责位移）。
-                    viewHolder.itemView.animate()
-                        .translationY(0f)
-                        .translationX(0f)
-                        .setDuration(160L)
-                        .start()
-                }
-                // 正在播放退场动画的卡片不要被 ItemTouchHelper 重置回原状。
-                if (viewHolder.itemView === exitingView) return
-                viewHolder.itemView.findViewById<FocusCardLayout>(R.id.card)?.let {
-                    it.scaleX = 1f
-                    it.scaleY = 1f
-                    it.alpha = 1f
-                }
-                super.clearView(recyclerView, viewHolder)
+            override fun onDeckRelease(progress: Float, velocityY: Float) {
+                settleDeck(deckProgress, velocityY)
             }
         }
-        ItemTouchHelper(callback).attachToRecyclerView(binding.pager)
+    }
+
+    private fun applyDeck(p: Float) {
+        deckProgress = p
+        val position = currentPosition()
+        if (position == RecyclerView.NO_POSITION) return
+        val itemView = binding.pager.findViewHolderForAdapterPosition(position)?.itemView ?: return
+        val card = itemView.findViewById<FocusCardLayout>(R.id.card) ?: return
+
+        DeckTransition.applyOutgoing(itemView, card, p, vertical = true)
+
+        childAtPosition(position + 1)?.let { nextView ->
+            nextView.translationX = -nextView.left.toFloat()
+            nextView.translationZ = 0f
+            nextView.findViewById<FocusCardLayout>(R.id.card)?.let { nextCard ->
+                DeckTransition.applyIncoming(
+                    nextView,
+                    nextCard,
+                    p,
+                    vertical = true,
+                    liftPx = dp72(),
+                    opaque = false,
+                    fromScale = 0.94f
+                )
+            }
+        }
+    }
+
+    private fun settleDeck(progress: Float, velocityY: Float) {
+        val commit = progress >= SWIPE_THRESHOLD || velocityY < -FLING_VELOCITY
+        val target = if (commit) 1f else 0f
+        val height = binding.pager.height.coerceAtLeast(1).toFloat()
+        val distance = (kotlin.math.abs(target - progress) * height).toInt()
+        deckAnimator?.cancel()
+        deckAnimator = DeckTransition.animate(
+            from = progress,
+            to = target,
+            duration = decelerationDuration(distance),
+            onUpdate = { applyDeck(it) },
+            onEnd = {
+                deckAnimator = null
+                binding.swipeGlow.animate().alpha(0f).setDuration(160L).start()
+                if (commit) {
+                    finishDeckSwipe()
+                } else {
+                    resetDeck()
+                }
+                deckProgress = 0f
+                deckResume = 0f
+            }
+        )
+    }
+
+    /** 动画走完之后才标记删除。 */
+    private fun finishDeckSwipe() {
+        val position = currentPosition()
+        if (position == RecyclerView.NO_POSITION) return
+        val page = adapter.currentList.getOrNull(position) as? FocusPage.Photo ?: return
+
+        // 先把「下一张」真正落到当前页（列表横向滚过去一屏）并同步归位变换：
+        // 否则它还带着拖动时钉住它的 translationX，数据一变就会被画到屏幕外，出现黑闪。
+        val next = childAtPosition(position + 1)
+        runCatching { binding.pager.scrollBy(binding.pager.width, 0) }
+        next?.let { view ->
+            view.translationX = 0f
+            view.translationZ = 0f
+            view.findViewById<FocusCardLayout>(R.id.card)?.let { card ->
+                DeckTransition.reset(view, card)
+            }
+        }
+
+        pendingNextReset = next
+        markForDeletion(position, page)
+    }
+
+    private fun resetDeck() {
+        val position = currentPosition()
+        if (position != RecyclerView.NO_POSITION) {
+            binding.pager.findViewHolderForAdapterPosition(position)?.itemView?.let { view ->
+                view.findViewById<FocusCardLayout>(R.id.card)?.let { card ->
+                    DeckTransition.reset(view, card)
+                }
+            }
+            childAtPosition(position + 1)?.let { view ->
+                view.translationX = 0f
+                view.translationZ = 0f
+                view.findViewById<FocusCardLayout>(R.id.card)?.let { card ->
+                    DeckTransition.reset(view, card)
+                }
+            }
+        }
+        binding.swipeGlow.alpha = 0f
     }
 
     private fun observePages() {
@@ -579,37 +463,10 @@ class PhotoFocusActivity : AppCompatActivity() {
         return null
     }
 
-    /**
-     * 删除的收尾：等下一张的图片真正加载出来（最多 1 秒）再把它从列表里移除。
-     * 不移除前先不动视图，避免"要删的这张"被复位拉回视野闪一下。
-     */
-    private fun removeWhenReady(
-        position: Int,
-        page: FocusPage.Photo,
-        itemView: View,
-        nextView: View?,
-        nextCard: FocusCardLayout?,
-        attempt: Int = 0
-    ) {
-        val loaded = nextCard?.photoView?.drawable != null
-        if (!loaded && attempt < 20 && nextView?.parent != null) {
-            binding.pager.postDelayed({
-                removeWhenReady(position, page, itemView, nextView, nextCard, attempt + 1)
-            }, 50L)
-            return
-        }
-
-        exitingView = null
-        deleteAnimating = false
-        dragNextPinned = false
-        deleteDragPx = 0f
-        pendingNextReset = nextView
-        markForDeletion(position, page)
-    }
-
     private fun updateChrome(page: FocusPage?) {
         when (page) {
             is FocusPage.Photo -> {
+                binding.pager.deckEnabled = true
                 binding.bottomBar.isVisible = true
                 binding.favoriteButton.isEnabled = true
                 binding.favoriteButton.alpha = 1f
@@ -620,6 +477,7 @@ class PhotoFocusActivity : AppCompatActivity() {
             }
 
             is FocusPage.Summary -> {
+                binding.pager.deckEnabled = false
                 locationJob?.cancel()
                 binding.bottomBar.isVisible = false
                 if (page.pending.isEmpty() && !page.busy && viewModel.autoNextGroup) {
@@ -628,6 +486,7 @@ class PhotoFocusActivity : AppCompatActivity() {
             }
 
             null -> {
+                binding.pager.deckEnabled = false
                 locationJob?.cancel()
                 binding.bottomBar.isVisible = false
             }
