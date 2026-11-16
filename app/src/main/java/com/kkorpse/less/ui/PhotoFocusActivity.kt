@@ -23,7 +23,6 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.PagerSnapHelper
 import androidx.recyclerview.widget.RecyclerView
@@ -32,6 +31,7 @@ import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaItem
 import com.kkorpse.less.data.PhotoFocusSession
+import com.kkorpse.less.prefs.BrowseMode
 import com.kkorpse.less.databinding.ActivityPhotoFocusBinding
 import com.kkorpse.less.util.Format
 import com.kkorpse.less.util.PhotoColorResolver
@@ -60,6 +60,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var lastDeleteItems: List<MediaItem> = emptyList()
     private var lastCleanupUris: List<Uri> = emptyList()
     private var pendingNextReset: View? = null
+    private var expandRequesting = false
     private var lastPreloadPosition = -1
     private var deckAnimator: android.animation.ValueAnimator? = null
     /** 上滑删除的唯一进度：拖动和收尾动画都写它。 */
@@ -161,6 +162,8 @@ class PhotoFocusActivity : AppCompatActivity() {
             )
             (binding.back.layoutParams as FrameLayout.LayoutParams).topMargin =
                 dp(12) + bars.top
+            (binding.expandButton.layoutParams as FrameLayout.LayoutParams).topMargin =
+                dp(12) + bars.top
             (binding.bottomBar.layoutParams as FrameLayout.LayoutParams).bottomMargin =
                 bars.bottom
             val contentTop = bars.top + dp(8)
@@ -177,6 +180,7 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
         binding.undoButton.setOnClickListener { undoLastMark() }
         binding.infoButton.setOnClickListener { showPhotoInfo() }
+        binding.expandButton.setOnClickListener { expandCurrent() }
         binding.pager.addOnScrollListener(object : RecyclerView.OnScrollListener() {
             override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
                 if (newState == RecyclerView.SCROLL_STATE_IDLE) {
@@ -445,6 +449,31 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * 展开在随机模式下才有意义：顺序模式下相邻的那几张本来就在组里。
+     * 收藏页（autoNextGroup=false）没有"组"的概念，也不显示。
+     */
+    private fun canExpand(): Boolean = viewModel.autoNextGroup &&
+        (application as LessApp).preferences.browseMode == BrowseMode.RANDOM
+
+    private fun expandCurrent() {
+        val page = currentPage() as? FocusPage.Photo ?: return
+        if (expandRequesting) return
+        expandRequesting = true
+        binding.expandButton.animate().alpha(0.35f).setDuration(120L).start()
+        viewModel.expand(page) { count ->
+            expandRequesting = false
+            binding.expandButton.animate().alpha(1f).setDuration(120L).start()
+            Toast.makeText(
+                this,
+                if (count > 0) getString(R.string.expand_added, count)
+                else getString(R.string.expand_empty),
+                Toast.LENGTH_SHORT
+            ).show()
+            updateChrome(currentPage())
+        }
+    }
+
     private fun dp72(): Float = dp(72).toFloat()
 
     /** 抄 LinearSmoothScroller：MILLISECONDS_PER_INCH = 25，除以 0.3356 得到减速时长。 */
@@ -467,6 +496,7 @@ class PhotoFocusActivity : AppCompatActivity() {
         when (page) {
             is FocusPage.Photo -> {
                 binding.pager.deckEnabled = true
+                binding.expandButton.isVisible = canExpand()
                 binding.bottomBar.isVisible = true
                 binding.favoriteButton.isEnabled = true
                 binding.favoriteButton.alpha = 1f
@@ -478,6 +508,7 @@ class PhotoFocusActivity : AppCompatActivity() {
 
             is FocusPage.Summary -> {
                 binding.pager.deckEnabled = false
+                binding.expandButton.isVisible = false
                 locationJob?.cancel()
                 binding.bottomBar.isVisible = false
                 if (page.pending.isEmpty() && !page.busy && viewModel.autoNextGroup) {
@@ -487,6 +518,7 @@ class PhotoFocusActivity : AppCompatActivity() {
 
             null -> {
                 binding.pager.deckEnabled = false
+                binding.expandButton.isVisible = false
                 locationJob?.cancel()
                 binding.bottomBar.isVisible = false
             }

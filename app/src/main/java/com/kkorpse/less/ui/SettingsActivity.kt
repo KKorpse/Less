@@ -10,10 +10,12 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.isVisible
 import androidx.core.view.updatePadding
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.databinding.ActivitySettingsBinding
+import com.kkorpse.less.prefs.AppPreferences
 import com.kkorpse.less.prefs.BrowseMode
 import com.kkorpse.less.prefs.DoubleTapAction
 import com.kkorpse.less.util.dp
@@ -54,6 +56,23 @@ class SettingsActivity : AppCompatActivity() {
             updateGroupSizeLabel(size)
         }
 
+        binding.expandWidthSlider.value = preferences.expandRadius.toFloat()
+            .coerceIn(
+                AppPreferences.MIN_EXPAND_RADIUS.toFloat(),
+                AppPreferences.MAX_EXPAND_RADIUS.toFloat()
+            )
+        updateExpandWidthLabel(preferences.expandRadius)
+        binding.expandWidthSlider.addOnChangeListener { _, value, _ ->
+            val radius = value.roundToInt().coerceIn(
+                AppPreferences.MIN_EXPAND_RADIUS,
+                AppPreferences.MAX_EXPAND_RADIUS
+            )
+            preferences.expandRadius = radius
+            updateExpandWidthLabel(radius)
+        }
+        // 展开只在随机模式下有意义，设置项跟着模式显隐。
+        binding.expandWidthCard.isVisible = preferences.browseMode == BrowseMode.RANDOM
+
         binding.videoGroupSizeSlider.value = preferences.videoGroupSize.toFloat().coerceIn(3f, 30f)
         updateVideoGroupSizeLabel(preferences.videoGroupSize)
         binding.videoGroupSizeSlider.addOnChangeListener { _, value, _ ->
@@ -93,6 +112,7 @@ class SettingsActivity : AppCompatActivity() {
             if (previous == BrowseMode.SEQUENTIAL && target == BrowseMode.RANDOM) {
                 app.browseStore.clearCurrentGroup(BrowseMode.RANDOM.name)
             }
+            binding.expandWidthCard.isVisible = target == BrowseMode.RANDOM
         }
 
         val versionName = runCatching {
@@ -114,6 +134,10 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun updateGroupSizeLabel(size: Int) {
         binding.groupSizeValue.text = getString(R.string.settings_group_size_value, size)
+    }
+
+    private fun updateExpandWidthLabel(radius: Int) {
+        binding.expandWidthValue.text = getString(R.string.settings_expand_width_value, radius)
     }
 
     private fun updateVideoGroupSizeLabel(size: Int) {

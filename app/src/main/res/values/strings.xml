@@ -155,6 +155,12 @@
     <string name="favorite_removed">已取消收藏</string>
 
     <string name="viewer_back">返回</string>
+    <string name="expand_content_desc">展开相邻照片</string>
+    <string name="expand_added">已展开 %1$d 张相邻照片</string>
+    <string name="expand_empty">附近没有可展开的照片</string>
+    <string name="settings_expand_width">展开的宽度</string>
+    <string name="settings_expand_width_value">%1$d 格</string>
+    <string name="settings_expand_width_hint">随机模式下展开时，左右各补进多少张相邻照片</string>
     <string name="viewer_position">%1$d / %2$d</string>
     <string name="viewer_image_error">无法加载这张图片</string>
     <string name="viewer_video_error">无法播放这个视频</string>

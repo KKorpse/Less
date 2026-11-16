@@ -14,8 +14,9 @@ import kotlinx.coroutines.launch
 class PhotoFocusViewModel(application: Application) : AndroidViewModel(application) {
 
     private val app = application as LessApp
+    private val repository = MediaRepository(application, app.browseStore)
     private val groupBuilder = PhotoGroupBuilder(
-        MediaRepository(application, app.browseStore),
+        repository,
         app.preferences,
         app.browseStore
     )
@@ -33,6 +34,8 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
     var currentIndex: Int = 0
     var groupGeneration: Int = 0
         private set
+
+    private var expanding = false
 
     private var initialized = false
     var autoNextGroup: Boolean = true
@@ -85,6 +88,52 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
                     autoNextGroup = false
                     emit()
                 }
+        }
+    }
+
+    /**
+     * 展开：把当前这张在完整相册里相邻的左右各「展开宽度」张补进本组，放在它后面。
+     * 已经在组里或已经标记待删的会跳过；回调拿到实际补进来的张数（0 表示附近没有可加的）。
+     */
+    fun expand(page: FocusPage.Photo, onDone: (Int) -> Unit) {
+        if (expanding) return
+        if (photoPages.none { it.item.uri == page.item.uri }) return
+        expanding = true
+        viewModelScope.launch {
+            val photos = repository.loadPhotos(app.preferences.photoBucketId)
+                .getOrElse { emptyList() }
+            expanding = false
+
+            val anchor = photoPages.indexOfFirst { it.item.uri == page.item.uri }
+            val center = photos.indexOfFirst { it.uri == page.item.uri }
+            if (anchor < 0 || center < 0) {
+                onDone(0)
+                return@launch
+            }
+
+            val known = HashSet<String>(photoPages.size + pending.size)
+            photoPages.mapTo(known) { it.item.uri.toString() }
+            pending.mapTo(known) { it.item.uri.toString() }
+
+            val radius = app.preferences.expandRadius
+            val neighbors = ((center - radius)..(center + radius))
+                .filter { it != center && it in photos.indices }
+                .map { photos[it] }
+                .filter { it.uri.toString() !in known }
+                .distinctBy { it.uri.toString() }
+            if (neighbors.isEmpty()) {
+                onDone(0)
+                return@launch
+            }
+
+            // 序号只用于「删除后撤回」找回相对位置，取一段不会与现有冲突的值即可。
+            var nextIndex = (photoPages.maxOfOrNull { it.originalIndex } ?: -1) + 1
+            val added = neighbors.map { FocusPage.Photo(it, nextIndex++) }
+            photoPages.addAll(anchor + 1, added)
+            groupSize += added.size
+            persistCurrentGroup()
+            emit()
+            onDone(added.size)
         }
     }
 
@@ -159,6 +208,13 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
             pending += PendingDelete(page.item, originalIndex)
             photoPages.remove(page)
         }
+    }
+
+    /** 展开后这一组变大了，同步写回，退出重进仍是展开后的组。 */
+    private fun persistCurrentGroup() {
+        if (!autoNextGroup) return
+        val mode = app.preferences.browseMode.name
+        app.browseStore.setCurrentGroupUris(mode, photoPages.map { it.item.uri.toString() })
     }
 
     private fun persistPendingMarks() {

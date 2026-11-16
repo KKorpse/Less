@@ -42,6 +42,11 @@
   - 第一行加粗：相对时间（今天 / N 天前 / N 周前 / N 个月前 / N 年前）
   - 第二行小号灰色：拍摄地址
 - 气泡右侧有一个信息按钮，可查看文件名、完整时间、地址
+- 右上角圆角方形「展开」按钮（和左上角关闭按钮同尺寸）：
+  - 只在随机模式下出现（顺序模式下相邻的照片本来就在组里）
+  - 点一下把这张在完整相册里相邻的左右各「展开的宽度」张补进本组，排在这张之后
+  - 已经在组里、或已标记待删的照片会跳过；附近没有可加的会提示
+  - 展开后的组会写回，退出重进仍是展开后的组
 - 图片可用区域：左右各留 12dp，上到状态栏下方，下到收藏/时间/撤回按钮上方；方图抵满左右，长图抵满上下
 - 双指捏合放大，放大后单指拖动；缩回原始尺寸自动回到正常显示（不允许缩得比适配尺寸更小）
 - 圆角 16dp；缩放时裁剪范围跟着图片走，整张图连同圆角一起放大，不会出现固定大小的画框
@@ -76,6 +81,7 @@
 
 - 照片每组数量：3–30 张，默认 10
 - 视频每组数量：3–30 个，默认 10
+- 展开的宽度：1–10 格，默认 4 格（展开时左右各补进的相邻张数）；只在随机模式显示
 - 双击手势：收藏 / 放大
 - 浏览模式：随机 / 顺序
 - 复制诊断信息：设备、系统、权限、相册、启动日志、最近的图片加载错误，一键复制
@@ -111,7 +117,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.2.54（versionCode 63） |
+| 当前版本 | 2.2.55（versionCode 64） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -134,7 +140,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.2.54-debug.apk
+app/build/outputs/apk/debug/Less-v2.2.55-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -203,13 +209,14 @@ dist/Less-v2.2.51-debug.apk
 dist/Less-v2.2.52-debug.apk
 dist/Less-v2.2.53-debug.apk
 dist/Less-v2.2.54-debug.apk
+dist/Less-v2.2.55-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.54-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.2.55-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -229,7 +236,7 @@ dist/SHA256SUMS.txt
 - 验证签名：
 
   ```bash
-  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.2.54-debug.apk
+  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.2.55-debug.apk
   ```
 
 - **一次性切换**：2.2.3 及更早的 `dist/` 包是原作者机器的 debug keystore 签的，与统一签名不一致，第一次装 2.2.4 必须先卸载旧包（卸载前可按下面的命令备份应用数据）。
@@ -245,7 +252,7 @@ adb exec-out run-as $PKG cat shared_prefs/less_browse.xml > less_browse.xml
 adb exec-out run-as $PKG cat shared_prefs/less_settings.xml > less_settings.xml
 
 adb uninstall $PKG
-adb install -r dist/Less-v2.2.54-debug.apk
+adb install -r dist/Less-v2.2.55-debug.apk
 
 adb shell am force-stop $PKG
 adb shell run-as $PKG mkdir -p shared_prefs

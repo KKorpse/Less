@@ -33,6 +33,19 @@ class AppPreferences(context: Context) {
                 .apply()
         }
 
+    /** 展开的宽度：随机模式下「展开」时左右各补进多少张。 */
+    var expandRadius: Int
+        get() = prefs.getInt(KEY_EXPAND_RADIUS, DEFAULT_EXPAND_RADIUS)
+            .coerceIn(MIN_EXPAND_RADIUS, MAX_EXPAND_RADIUS)
+        set(value) {
+            prefs.edit()
+                .putInt(
+                    KEY_EXPAND_RADIUS,
+                    value.coerceIn(MIN_EXPAND_RADIUS, MAX_EXPAND_RADIUS)
+                )
+                .apply()
+        }
+
     var doubleTapAction: DoubleTapAction
         get() = runCatching {
             DoubleTapAction.valueOf(
@@ -106,8 +119,12 @@ class AppPreferences(context: Context) {
         const val MAX_GROUP_SIZE = 30
         const val DEFAULT_GROUP_SIZE = 10
         const val DEFAULT_VIDEO_GROUP_SIZE = 10
+        const val MIN_EXPAND_RADIUS = 1
+        const val MAX_EXPAND_RADIUS = 10
+        const val DEFAULT_EXPAND_RADIUS = 4
 
         private const val KEY_GROUP_SIZE = "group_size"
+        private const val KEY_EXPAND_RADIUS = "expand_radius"
         private const val KEY_DOUBLE_TAP = "double_tap"
         private const val KEY_BROWSE_MODE = "browse_mode"
         private const val KEY_LOCATION_ASKED = "location_asked"
