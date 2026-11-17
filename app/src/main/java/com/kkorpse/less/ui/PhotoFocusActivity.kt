@@ -373,11 +373,16 @@ class PhotoFocusActivity : AppCompatActivity() {
             Toast.makeText(this, R.string.open_in_gallery_starting, Toast.LENGTH_SHORT).show()
             openInGallery(page.item)
         }
-        MaterialAlertDialogBuilder(this)
+        val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.photo_info_title)
             .setView(dialogView.root)
             .setPositiveButton(android.R.string.ok, null)
-            .show()
+            .create()
+        dialog.show()
+        // 自定义视图不受 message 的宽度约束，手动给一个居中、有上限的宽度。
+        val screenWidth = resources.displayMetrics.widthPixels
+        val width = minOf(dp(460), (screenWidth * 0.86f).toInt())
+        dialog.window?.setLayout(width, FrameLayout.LayoutParams.WRAP_CONTENT)
     }
 
     /**
