@@ -368,16 +368,17 @@ class PhotoFocusActivity : AppCompatActivity() {
         // 用自定义视图里的普通 TextView 触发，绕开系统弹窗按钮在某些 ROM 上点击不到的问题。
         val dialogView = com.kkorpse.less.databinding.DialogPhotoInfoBinding.inflate(layoutInflater)
         dialogView.infoDialogMessage.text = message
-        dialogView.infoDialogOpenGallery.setOnClickListener {
-            Breadcrumbs.step(this, "info dialog: gallery button tapped")
-            Toast.makeText(this, R.string.open_in_gallery_starting, Toast.LENGTH_SHORT).show()
-            openInGallery(page.item)
-        }
         val dialog = MaterialAlertDialogBuilder(this)
             .setTitle(R.string.photo_info_title)
             .setView(dialogView.root)
-            .setPositiveButton(android.R.string.ok, null)
             .create()
+        dialogView.infoDialogClose.setOnClickListener { dialog.dismiss() }
+        dialogView.infoDialogOpenGallery.setOnClickListener {
+            Breadcrumbs.step(this, "info dialog: gallery button tapped")
+            Toast.makeText(this, R.string.open_in_gallery_starting, Toast.LENGTH_SHORT).show()
+            dialog.dismiss()
+            openInGallery(page.item)
+        }
         dialog.show()
         // 自定义视图不受 message 的宽度约束，手动给一个居中、有上限的宽度。
         val screenWidth = resources.displayMetrics.widthPixels

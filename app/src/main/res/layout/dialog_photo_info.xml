@@ -7,7 +7,7 @@
     android:paddingStart="24dp"
     android:paddingTop="4dp"
     android:paddingEnd="24dp"
-    android:paddingBottom="4dp">
+    android:paddingBottom="6dp">
 
     <TextView
         android:id="@+id/infoDialogMessage"
@@ -18,16 +18,40 @@
         android:textColor="@color/text_secondary"
         android:textSize="15sp" />
 
-    <com.google.android.material.button.MaterialButton
-        android:id="@+id/infoDialogOpenGallery"
+    <LinearLayout
         android:layout_width="match_parent"
-        android:layout_height="46dp"
-        android:layout_marginTop="20dp"
-        android:backgroundTint="@color/surface_high"
-        android:insetTop="0dp"
-        android:insetBottom="0dp"
-        android:text="@string/photo_info_open_gallery"
-        android:textColor="@color/accent_blue"
-        android:textSize="14sp"
-        app:cornerRadius="14dp" />
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:gravity="end"
+        android:orientation="horizontal">
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/infoDialogClose"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:text="@string/photo_info_close"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/infoDialogOpenGallery"
+            style="@style/Widget.MaterialComponents.Button.TextButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:insetTop="0dp"
+            android:insetBottom="0dp"
+            android:minWidth="0dp"
+            android:paddingStart="14dp"
+            android:paddingEnd="14dp"
+            android:text="@string/photo_info_open_gallery"
+            android:textColor="@color/accent_blue"
+            android:textSize="14sp" />
+    </LinearLayout>
 </LinearLayout>
