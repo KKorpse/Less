@@ -345,6 +345,7 @@ class PhotoFocusActivity : AppCompatActivity() {
             .setTitle(R.string.photo_info_title)
             .setMessage(message)
             .setNeutralButton(R.string.photo_info_open_gallery) { _, _ ->
+                Breadcrumbs.step(this, "info dialog: gallery button tapped")
                 openInGallery(page.item)
             }
             .setPositiveButton(android.R.string.ok, null)
@@ -361,6 +362,7 @@ class PhotoFocusActivity : AppCompatActivity() {
      */
     private fun openInGallery(item: MediaItem) {
         val uri = item.uri
+        Breadcrumbs.step(this, "openInGallery start $uri (${item.mimeType})")
         if (isPickerUri(uri)) {
             Breadcrumbs.step(this, "openInGallery picker-uri $uri")
             Toast.makeText(this, R.string.open_in_gallery_picker_only, Toast.LENGTH_LONG).show()
@@ -376,33 +378,37 @@ class PhotoFocusActivity : AppCompatActivity() {
         attempts += "implicit" to base
         GALLERY_PACKAGES.forEach { attempts += it to Intent(base).setPackage(it) }
 
-        val log = StringBuilder("openInGallery $uri ($type)")
+        var lastError: Throwable? = null
         for ((label, intent) in attempts) {
             val resolved = runCatching {
                 packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
                     ?.activityInfo?.let { info -> "${info.packageName}/${info.name}" }
             }.getOrNull()
             val result = runCatching { startActivity(intent) }
-            log.append("\n  ").append(label).append(" -> ").append(resolved ?: "none")
-            if (result.isSuccess) {
-                log.append(" ok")
-                Breadcrumbs.step(this, log.toString())
-                return
+            val outcome = if (result.isSuccess) {
+                "ok"
+            } else {
+                "fail(${result.exceptionOrNull()?.javaClass?.simpleName})"
             }
-            log.append(" fail(")
-                .append(result.exceptionOrNull()?.javaClass?.simpleName)
-                .append(')')
+            Breadcrumbs.step(this, "openInGallery $label -> ${resolved ?: "none"} $outcome")
+            if (result.isSuccess) return
+            lastError = result.exceptionOrNull()
         }
-        Breadcrumbs.step(this, log.toString())
-        Diagnostics.recordError(uri.toString(), null)
+
+        Diagnostics.recordError(uri.toString(), lastError)
+        Toast.makeText(
+            this,
+            getString(
+                R.string.open_in_gallery_failed_detail,
+                lastError?.javaClass?.simpleName ?: "unknown"
+            ),
+            Toast.LENGTH_LONG
+        ).show()
 
         // 兜底：交给系统选择器，至少能看到"没有可用应用"这类反馈。
         val chooser = Intent.createChooser(base, getString(R.string.photo_info_open_gallery))
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        val launched = runCatching { startActivity(chooser) }.isSuccess
-        if (!launched) {
-            Toast.makeText(this, R.string.open_in_gallery_failed, Toast.LENGTH_SHORT).show()
-        }
+        runCatching { startActivity(chooser) }
     }
 
     /** 系统选择器（Photo Picker）给的 URI：别的应用没有读权限。 */
