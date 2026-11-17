@@ -243,6 +243,8 @@ class MainActivity : AppCompatActivity() {
             tx.show(target)
             tx.commit()
             visibleTab = tab
+            // 统计页的查看/删除数会随照片专注变化，切过去时主动刷一次。
+            (target as? StatsFragment)?.reload()
         }
 
         if (force || !binding.tabContainer.isVisible) {

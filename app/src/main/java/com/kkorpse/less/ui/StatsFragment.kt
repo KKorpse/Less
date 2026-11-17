@@ -46,10 +46,18 @@ class StatsFragment : Fragment() {
         binding.resetRow.setOnClickListener { confirmReset() }
     }
 
+    override fun onStart() {
+        super.onStart()
+        loadStats()
+    }
+
     override fun onResume() {
         super.onResume()
         if (!isHidden) loadStats()
     }
+
+    /** 切到统计 tab 时由 MainActivity 主动刷新，避免依赖隐藏/显示回调的时序。 */
+    fun reload() = loadStats()
 
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
@@ -71,7 +79,7 @@ class StatsFragment : Fragment() {
         }
     }
 
-    private fun loadStats() {
+    fun loadStats() {
         if (_binding == null) return
         viewLifecycleOwner.lifecycleScope.launch {
             if (_binding == null) return@launch
