@@ -22,6 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.kkorpse.less.Diagnostics
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.data.MediaItem
@@ -42,6 +43,12 @@ class PhotoFocusActivity : AppCompatActivity() {
     companion object {
         /** 上滑到卡片高度的 8% 就算要删除，手指不松开时表现为顶部红光逐渐亮起。 */
         private const val SWIPE_THRESHOLD = 0.08f
+        /** 常见的 ColorOS / 原生相册包名，作为兜底显式打开。 */
+        private val GALLERY_PACKAGES = listOf(
+            "com.oplus.gallery",
+            "com.coloros.gallery3d",
+            "com.android.gallery3d"
+        )
     }
 
     private lateinit var binding: ActivityPhotoFocusBinding
@@ -198,17 +205,12 @@ class PhotoFocusActivity : AppCompatActivity() {
                             0
                         }
 
-                        // 撤回：回到被恢复的那张。
+                        // 撤回：回到被恢复的那张。用掉就清掉，找不到也不留到下一次刷新。
                         pendingScrollOriginalIndex != null -> {
-                            val target = latest.indexOfFirst {
-                                it is FocusPage.Photo &&
-                                    it.originalIndex == pendingScrollOriginalIndex
-                            }
-                            if (target >= 0) {
-                                pendingScrollOriginalIndex = null
-                                target
-                            } else {
-                                -1
+                            val originalIndex = pendingScrollOriginalIndex
+                            pendingScrollOriginalIndex = null
+                            latest.indexOfFirst {
+                                it is FocusPage.Photo && it.originalIndex == originalIndex
                             }
                         }
 
@@ -342,15 +344,35 @@ class PhotoFocusActivity : AppCompatActivity() {
             .setTitle(R.string.photo_info_title)
             .setMessage(message)
             .setNeutralButton(R.string.photo_info_open_gallery) { _, _ ->
-                runCatching {
-                    startActivity(
-                        Intent(Intent.ACTION_VIEW, page.item.uri)
-                            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    )
-                }
+                openInGallery(page.item)
             }
             .setPositiveButton(android.R.string.ok, null)
             .show()
+    }
+
+    /**
+     * 交给系统相册打开这张图。
+     *
+     * 必须带 MIME type（`setDataAndType`）：只给 content:// 时部分 ROM 解析不出类型，
+     * 没有 Activity 能匹配，startActivity 直接抛异常，表现就是"点了没反应"。
+     */
+    private fun openInGallery(item: MediaItem) {
+        val type = item.mimeType.takeIf { it.isNotBlank() } ?: "image/*"
+        val base = Intent(Intent.ACTION_VIEW)
+            .setDataAndType(item.uri, type)
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val candidates = buildList {
+            add(base)
+            GALLERY_PACKAGES.forEach { pkg -> add(Intent(base).setPackage(pkg)) }
+        }
+        var lastError: Throwable? = null
+        for (intent in candidates) {
+            val result = runCatching { startActivity(intent) }
+            if (result.isSuccess) return
+            lastError = result.exceptionOrNull()
+        }
+        Diagnostics.recordError(item.uri.toString(), lastError)
+        Toast.makeText(this, R.string.open_in_gallery_failed, Toast.LENGTH_SHORT).show()
     }
 
     private fun maybeRequestLocationPermission() {
@@ -426,8 +448,13 @@ class PhotoFocusActivity : AppCompatActivity() {
 
     private fun undoLastMark() {
         if (batchController.isBusy) return
-        val entry = viewModel.undoLastPending() ?: return
-        pendingScrollOriginalIndex = entry.originalIndex
+        // 先记下要回到哪一张：undoLastPending() 会同步触发一次页面刷新，
+        // 晚一步设置就会错过这次刷新，结果"撤回后停在原地"，然后在下一次刷新时乱跳。
+        val target = viewModel.pendingEntries().lastOrNull() ?: return
+        pendingScrollOriginalIndex = target.originalIndex
+        if (viewModel.undoLastPending() == null) {
+            pendingScrollOriginalIndex = null
+        }
     }
 
     private fun refreshUndo() {
