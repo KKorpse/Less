@@ -391,6 +391,15 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
 
         val type = item.mimeType.takeIf { it.isNotBlank() } ?: "image/*"
+        // 记录媒体库自己认为的类型、以及我们能不能读到这份数据（读不到的话别的应用更读不到）。
+        val resolverType = runCatching { contentResolver.getType(uri) }.getOrNull()
+        val readable = runCatching {
+            contentResolver.openInputStream(uri)?.use { it.read() } != null
+        }.getOrDefault(false)
+        Breadcrumbs.step(
+            this,
+            "openInGallery uri type=$resolverType readable=$readable"
+        )
         val base = Intent(Intent.ACTION_VIEW)
             .setDataAndType(uri, type)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
@@ -412,7 +421,23 @@ class PhotoFocusActivity : AppCompatActivity() {
                 "fail(${result.exceptionOrNull()?.javaClass?.simpleName})"
             }
             Breadcrumbs.step(this, "openInGallery $label -> ${resolved ?: "none"} $outcome")
-            if (result.isSuccess) return
+            if (result.isSuccess) {
+                // 打开成功也给一句反馈：如果相册没起来，至少能看出是交给了谁。
+                val packageName = resolved?.substringBefore('/')
+                val appLabel = packageName?.let { pkg ->
+                    runCatching {
+                        packageManager.getApplicationLabel(
+                            packageManager.getApplicationInfo(pkg, 0)
+                        ).toString()
+                    }.getOrNull()
+                }
+                Toast.makeText(
+                    this,
+                    getString(R.string.open_in_gallery_handoff, appLabel ?: "系统"),
+                    Toast.LENGTH_SHORT
+                ).show()
+                return
+            }
             lastError = result.exceptionOrNull()
         }
 
