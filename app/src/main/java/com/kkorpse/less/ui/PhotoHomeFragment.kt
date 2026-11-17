@@ -205,6 +205,7 @@ class PhotoHomeFragment : Fragment() {
             binding.background.setImageDrawable(null)
             binding.emptyMessage.setText(
                 when {
+                    state.exhausted -> R.string.photo_all_viewed
                     preferences.favoritesOnly -> R.string.favorites_only_empty
                     preferences.photoBucketId != null -> R.string.album_empty_message
                     else -> R.string.photo_empty_message

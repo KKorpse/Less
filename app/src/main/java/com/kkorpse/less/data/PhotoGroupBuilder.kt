@@ -46,12 +46,21 @@ class PhotoGroupBuilder(
         return if (restored.size >= minSize) restored else null
     }
 
+    /** 最近一次选组是不是因为「都看过了」才空的，用于首页提示。 */
+    var lastSelectionExhausted: Boolean = false
+        private set
+
     private fun createGroup(photos: List<MediaItem>): List<MediaItem> {
         val group = selectGroup(photos, preferences.groupSize, preferences.browseMode)
+        lastSelectionExhausted = group.isEmpty() && photos.isNotEmpty()
         store.setCurrentGroupUris(preferences.groupKey, group.map { it.uri.toString() })
         return group
     }
 
+    /**
+     * 选组：**看过的照片不会再被选进来**（两种模式都一样，也不区分相册）。
+     * 想重新开始只能去「统计 → 重置浏览记录」。
+     */
     private fun selectGroup(
         photos: List<MediaItem>,
         size: Int,
@@ -60,15 +69,18 @@ class PhotoGroupBuilder(
         if (photos.isEmpty() || size <= 0) return emptyList()
 
         return when (mode) {
-            BrowseMode.RANDOM -> photos.shuffled().take(size)
+            BrowseMode.RANDOM -> photos
+                .filterNot { store.isViewed(it.uri, false) }
+                .shuffled()
+                .take(size)
 
             BrowseMode.SEQUENTIAL -> {
-                val start = store.sequentialCursor % photos.size
                 val selected = ArrayList<MediaItem>(size)
-                var index = start
+                var index = store.sequentialCursor % photos.size
                 var visited = 0
                 while (visited < photos.size && selected.size < size) {
-                    selected += photos[index]
+                    val item = photos[index]
+                    if (!store.isViewed(item.uri, false)) selected += item
                     index = (index + 1) % photos.size
                     visited++
                 }

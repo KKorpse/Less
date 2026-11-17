@@ -64,6 +64,13 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
             groupBuilder.advanceGroup()
                 .onSuccess { photos ->
                     if (photos.isEmpty()) {
+                        // 没有没看过的照片了：清空这一组，页面会退回首页（首页提示"都看过了"）。
+                        photoPages.clear()
+                        pending.clear()
+                        persistPendingMarks()
+                        groupSize = 0
+                        currentIndex = 0
+                        groupGeneration++
                         loadingNext = false
                         busy = false
                         emit()

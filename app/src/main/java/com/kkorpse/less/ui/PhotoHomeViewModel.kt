@@ -16,7 +16,9 @@ import kotlinx.coroutines.launch
 data class PhotoHomeState(
     val loading: Boolean = true,
     val photos: List<MediaItem> = emptyList(),
-    val error: String? = null
+    val error: String? = null,
+    /** 相册里的照片都看过了，没有可以再展示的。 */
+    val exhausted: Boolean = false
 )
 
 class PhotoHomeViewModel(application: Application) : AndroidViewModel(application) {
@@ -49,7 +51,11 @@ class PhotoHomeViewModel(application: Application) : AndroidViewModel(applicatio
             val result = if (force) builder.advanceGroup() else builder.currentOrNewGroup()
             result
                 .onSuccess { photos ->
-                    _state.value = PhotoHomeState(loading = false, photos = photos)
+                    _state.value = PhotoHomeState(
+                        loading = false,
+                        photos = photos,
+                        exhausted = photos.isEmpty() && builder.lastSelectionExhausted
+                    )
                 }
                 .onFailure {
                     _state.value = PhotoHomeState(
