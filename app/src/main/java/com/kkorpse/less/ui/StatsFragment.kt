@@ -88,7 +88,12 @@ class StatsFragment : Fragment() {
                 MediaAccess.mode(requireContext()) == AccessMode.PARTIAL
 
             val app = requireActivity().application as LessApp
-            val items = MediaRepository(requireContext()).loadLibrary().getOrElse { emptyList() }
+            // 总数包含收藏目录里的照片（收藏只是换了个位置，照片还在）；
+            // 已经复制到收藏、但原图还没清理的那一张只算一份。
+            val pendingCleanup = app.browseStore.pendingCleanupUris()
+            val items = MediaRepository(requireContext()).loadEverything()
+                .getOrElse { emptyList() }
+                .filterNot { it.uri.toString() in pendingCleanup }
             if (_binding == null) return@launch
 
             val photos = items.filter { !it.isVideo }

@@ -51,6 +51,26 @@ class MediaRepository(
         }
 
     /**
+     * 统计用：所有照片和视频，**包含收藏目录里的那一份**，也不做收藏位校准。
+     * 收藏只是换了个位置，照片还在，所以总数要把它们算进去。
+     */
+    suspend fun loadEverything(): Result<List<MediaItem>> =
+        withContext(Dispatchers.IO) {
+        try {
+            val items = (queryImages(includeFavorites = true) + queryVideos(includeFavorites = true))
+                .sortedWith(
+                    compareByDescending<MediaItem> { it.dateMillis }
+                        .thenByDescending { it.id }
+                )
+            Result.success(items)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    /**
      * 只看收藏：返回「收藏」里的图片——我们复制到 Pictures/Less/Favorites 的那一份，
      * 以及本地镜像里标记为收藏、但还没复制过的条目。
      */
