@@ -68,6 +68,19 @@ class AppPreferences(context: Context) {
             prefs.edit().putString(KEY_BROWSE_MODE, value.name).apply()
         }
 
+    /** 只看收藏：照片模式只浏览「收藏」里的图片，删除等于移出收藏。 */
+    var favoritesOnly: Boolean
+        get() = prefs.getBoolean(KEY_FAVORITES_ONLY, false)
+        set(value) {
+            prefs.edit().putBoolean(KEY_FAVORITES_ONLY, value).apply()
+        }
+
+    /** 组的持久化键：收藏模式和普通模式分开存，互不干扰。 */
+    val groupKey: String get() = groupKeyFor(browseMode)
+
+    fun groupKeyFor(mode: BrowseMode): String =
+        mode.name + if (favoritesOnly) "_fav" else ""
+
     /** 当前选择的相册（MediaStore BUCKET_ID），null 表示系统相册的全部照片。 */
     var photoBucketId: String?
         get() = prefs.getString(KEY_PHOTO_BUCKET_ID, null)?.takeIf { it.isNotBlank() }
@@ -124,6 +137,7 @@ class AppPreferences(context: Context) {
         const val DEFAULT_EXPAND_RADIUS = 4
 
         private const val KEY_GROUP_SIZE = "group_size"
+        private const val KEY_FAVORITES_ONLY = "favorites_only"
         private const val KEY_EXPAND_RADIUS = "expand_radius"
         private const val KEY_DOUBLE_TAP = "double_tap"
         private const val KEY_BROWSE_MODE = "browse_mode"

@@ -17,6 +17,10 @@ object FolderFavorites {
     /** MediaStore RELATIVE_PATH 需要以 / 结尾。 */
     const val PATH = "Pictures/Less/Favorites/"
 
+    /** 移出收藏后落到普通目录，照片变回普通照片。 */
+    const val NORMAL_PATH = "Pictures/Less/"
+    const val NORMAL_VIDEO_PATH = "Movies/Less/"
+
     fun isInFavorites(relativePath: String?): Boolean =
         relativePath?.startsWith(PATH) == true
 
@@ -93,6 +97,27 @@ object FolderFavorites {
             runCatching { put(MediaStore.MediaColumns.DATE_MODIFIED, dateMillis / 1000L) }
         }
         runCatching { resolver.update(uri, values, null, null) }
+    }
+
+    /**
+     * 取消收藏但保留照片：把副本从收藏目录移回普通目录，并把收藏位清零。
+     * 只处理我们自己创建的文件（收藏副本）。
+     */
+    fun moveOutOfFavorites(context: Context, item: MediaItem): Boolean {
+        if (!isInFavorites(item.relativePath)) return false
+        val resolver = context.contentResolver
+        val values = ContentValues().apply {
+            put(
+                MediaStore.MediaColumns.RELATIVE_PATH,
+                if (item.isVideo) NORMAL_VIDEO_PATH else NORMAL_PATH
+            )
+            put(MediaStore.MediaColumns.IS_FAVORITE, 0)
+        }
+        val moved = runCatching {
+            resolver.update(item.uri, values, null, null) >= 0
+        }.getOrDefault(false)
+        if (moved) runCatching { resolver.notifyChange(item.uri, null) }
+        return moved
     }
 
     /** 删除我们自己创建的副本（自己的文件，不需要授权）。 */

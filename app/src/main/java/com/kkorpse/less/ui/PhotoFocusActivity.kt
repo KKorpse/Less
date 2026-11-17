@@ -26,9 +26,12 @@ import com.kkorpse.less.Breadcrumbs
 import com.kkorpse.less.Diagnostics
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
+import com.kkorpse.less.data.FolderFavorites
+import com.kkorpse.less.data.MediaFavorites
 import com.kkorpse.less.data.MediaItem
 import com.kkorpse.less.data.PhotoFocusSession
 import com.kkorpse.less.prefs.BrowseMode
+import com.kkorpse.less.prefs.DoubleTapAction
 import com.kkorpse.less.databinding.ActivityPhotoFocusBinding
 import com.kkorpse.less.util.Format
 import com.kkorpse.less.util.PhotoColorResolver
@@ -36,8 +39,10 @@ import com.kkorpse.less.util.PhotoLocationResolver
 import com.kkorpse.less.util.dp
 import coil3.SingletonImageLoader
 import coil3.request.ImageRequest
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PhotoFocusActivity : AppCompatActivity() {
 
@@ -92,7 +97,11 @@ class PhotoFocusActivity : AppCompatActivity() {
 
         viewModel.initialize(session.items, session.startIndex, session.autoNextGroup)
         val app = application as LessApp
-        binding.deck.setPhotoActions(app.preferences.doubleTapAction, ::toggleFavorite)
+        binding.deck.setFavoritesMode(favoritesMode)
+        binding.deck.setPhotoActions(
+            if (favoritesMode) DoubleTapAction.ZOOM else app.preferences.doubleTapAction,
+            ::toggleFavorite
+        )
         binding.deck.setSummaryCallbacks(object : DeckCardView.SummaryCallbacks {
             override fun onTogglePending(entry: PendingDelete) {
                 viewModel.togglePendingSelection(entry.item)
@@ -150,7 +159,7 @@ class PhotoFocusActivity : AppCompatActivity() {
         // 只记录从首页进入的组；收藏页进来的会话不覆盖首页进度。
         if (!PhotoFocusSession.autoNextGroup) return
         val app = application as LessApp
-        val mode = app.preferences.browseMode.name
+        val mode = app.preferences.groupKey
         app.browseStore.setGroupIndex(mode, viewModel.currentIndex)
     }
 
@@ -253,8 +262,12 @@ class PhotoFocusActivity : AppCompatActivity() {
      * 展开在随机模式下才有意义：顺序模式下相邻的那几张本来就在组里。
      * 收藏页（autoNextGroup=false）没有"组"的概念，也不显示。
      */
-    private fun canExpand(): Boolean = viewModel.autoNextGroup &&
+    private fun canExpand(): Boolean = viewModel.autoNextGroup && !favoritesMode &&
         (application as LessApp).preferences.browseMode == BrowseMode.RANDOM
+
+    /** 只看收藏：照片模式只浏览收藏，删除等于移出收藏。 */
+    private val favoritesMode: Boolean
+        get() = (application as LessApp).preferences.favoritesOnly
 
     private fun expandCurrent() {
         val page = currentPage() as? FocusPage.Photo ?: return
@@ -279,9 +292,11 @@ class PhotoFocusActivity : AppCompatActivity() {
             is FocusPage.Photo -> {
                 binding.expandButton.isVisible = canExpand()
                 binding.bottomBar.isVisible = true
+                // 收藏模式下没有收藏操作。
+                binding.favoriteButton.isVisible = !favoritesMode
                 binding.favoriteButton.isEnabled = true
                 binding.favoriteButton.alpha = 1f
-                updateFavorite(page.item)
+                if (!favoritesMode) updateFavorite(page.item)
                 refreshUndo()
                 updateInfo(page)
                 updatePageBackground(page)
@@ -291,8 +306,14 @@ class PhotoFocusActivity : AppCompatActivity() {
                 binding.expandButton.isVisible = false
                 locationJob?.cancel()
                 binding.bottomBar.isVisible = false
+                // 组里一张照片都没有（比如收藏被清空）时不要再自动换组，否则会空转；直接回首页。
+                val hasPhotos = pages.any { it is FocusPage.Photo }
                 if (page.pending.isEmpty() && !page.busy && viewModel.autoNextGroup) {
-                    viewModel.loadNextGroup()
+                    if (hasPhotos) {
+                        viewModel.loadNextGroup()
+                    } else {
+                        finish()
+                    }
                 }
             }
 
@@ -489,6 +510,27 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
     }
 
+    /** 把收藏副本移回普通目录，清掉收藏标记和原图映射。 */
+    private fun moveOutOfFavorites(item: MediaItem): Boolean {
+        val store = (application as LessApp).browseStore
+        val inFavorites = FolderFavorites.isInFavorites(item.relativePath)
+        val moved = if (inFavorites) {
+            FolderFavorites.moveOutOfFavorites(this, item)
+        } else {
+            // 系统相册里标记的收藏：清掉媒体库的收藏位（尽力而为，失败会保留但本地不再展示）。
+            MediaFavorites.applyDirect(contentResolver, listOf(item.uri), false)
+            true
+        }
+        store.originalOfCopy(item.uri)?.let { original ->
+            store.forgetFavoriteCopy(original)
+            store.removePendingCleanup(listOf(original))
+        }
+        store.forgetFavoriteCopy(item.uri)
+        store.setFavorite(item.uri, false)
+        store.markLocalOnly(item.uri, false)
+        return moved
+    }
+
     private fun undoLastMark() {
         if (batchController.isBusy) return
         // 先记下要回到哪一张：undoLastPending() 会同步触发一次页面刷新，
@@ -517,6 +559,24 @@ class PhotoFocusActivity : AppCompatActivity() {
     private fun requestBatchDelete() {
         val selected = viewModel.selectedEntries()
         if (selected.isEmpty() || batchController.isBusy) return
+        if (favoritesMode) {
+            // 收藏模式：删除 = 移出收藏（保留照片），不调用系统回收站。
+            val items = selected.map { it.item }
+            viewModel.setBatchBusy(true)
+            lifecycleScope.launch {
+                val moved = withContext(Dispatchers.IO) {
+                    items.count { moveOutOfFavorites(it) }
+                }
+                viewModel.completeUnfavorite(items)
+                Toast.makeText(
+                    this@PhotoFocusActivity,
+                    getString(R.string.favorites_moved_out, moved),
+                    Toast.LENGTH_SHORT
+                ).show()
+                advanceAfterGroup()
+            }
+            return
+        }
         val store = (application as LessApp).browseStore
         // 已收藏的原图不展示，但一起送进回收站，保持「收藏=移动」的语义。
         val selectedUris = selected.map { it.item.uri }.toSet()

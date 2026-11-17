@@ -85,6 +85,11 @@ class FocusDeckView @JvmOverloads constructor(
         this.onFavorite = onFavorite
     }
 
+    fun setFavoritesMode(value: Boolean) {
+        front.setFavoritesMode(value)
+        back.setFavoritesMode(value)
+    }
+
     fun setSummaryCallbacks(callbacks: DeckCardView.SummaryCallbacks?) {
         front.setSummaryCallbacks(callbacks)
         back.setSummaryCallbacks(callbacks)

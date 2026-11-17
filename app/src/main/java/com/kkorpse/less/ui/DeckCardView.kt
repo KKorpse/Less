@@ -51,6 +51,9 @@ class DeckCardView @JvmOverloads constructor(
     /** 只有当前这张接收触摸，浮起来的那张永远不接收。 */
     var touchEnabled: Boolean = true
 
+    /** 收藏模式的汇总卡片：文案从「删除」改成「移出收藏」。 */
+    private var favoritesMode = false
+
     /** 当前绑定的页；同一个对象重复 bind 会直接跳过，避免重复解码。 */
     var page: FocusPage? = null
         private set
@@ -74,6 +77,12 @@ class DeckCardView @JvmOverloads constructor(
 
     fun setSummaryCallbacks(callbacks: SummaryCallbacks?) {
         summaryCallbacks = callbacks
+    }
+
+    fun setFavoritesMode(value: Boolean) {
+        if (favoritesMode == value) return
+        favoritesMode = value
+        (page as? FocusPage.Summary)?.let { bindSummary(it) }
     }
 
     fun setContentInsets(top: Int, bottom: Int) {
@@ -194,11 +203,16 @@ class DeckCardView @JvmOverloads constructor(
         val hasSelection = selected > 0
         val busy = summary.busy
 
-        reviewCard.reviewSubtitle.text = context.getString(
-            R.string.review_subtitle_count,
-            summary.pending.size
-        )
-        reviewCard.reviewConfirm.text = context.getString(R.string.review_confirm_n, selected)
+        reviewCard.reviewSubtitle.text = if (favoritesMode) {
+            context.getString(R.string.review_subtitle_unfavorite)
+        } else {
+            context.getString(R.string.review_subtitle_count, summary.pending.size)
+        }
+        reviewCard.reviewConfirm.text = if (favoritesMode) {
+            context.getString(R.string.review_confirm_unfavorite, selected)
+        } else {
+            context.getString(R.string.review_confirm_n, selected)
+        }
         reviewCard.reviewConfirm.isEnabled = hasSelection && !busy
         reviewCard.reviewConfirm.alpha = if (reviewCard.reviewConfirm.isEnabled) 1f else 0.4f
         reviewCard.reviewDiscard.isEnabled = !busy

@@ -43,7 +43,6 @@ class PhotoHomeFragment : Fragment() {
     private val viewModel: PhotoHomeViewModel by viewModels()
     private var lastSettingsSignature = ""
     private var lastGroupSize = -1
-    private var lastBrowseMode: String? = null
     private lateinit var repository: MediaRepository
 
     private val focusLauncher = registerForActivityResult(
@@ -129,17 +128,16 @@ class PhotoHomeFragment : Fragment() {
         super.onResume()
         val app = requireActivity().application as LessApp
         val size = app.preferences.groupSize
-        val mode = app.preferences.browseMode.name
+        val signature = settingsSignature()
         if (lastGroupSize != -1 && size != lastGroupSize) {
             // 每组数量变了才重新切一组。
             viewModel.load(force = true)
-        } else if (lastBrowseMode != null && mode != lastBrowseMode) {
-            // 切换模式只恢复该模式原来那一组（顺序 -> 随机 时随机组已在设置里清空）。
+        } else if (signature != lastSettingsSignature) {
+            // 浏览模式 / 只看收藏 变了，恢复对应的那一组（不重新随机）。
             viewModel.load(force = false)
         }
         lastGroupSize = size
-        lastBrowseMode = mode
-        lastSettingsSignature = settingsSignature()
+        lastSettingsSignature = signature
     }
 
     override fun onHiddenChanged(hidden: Boolean) {
@@ -164,7 +162,7 @@ class PhotoHomeFragment : Fragment() {
 
     private fun settingsSignature(): String {
         val prefs = (requireActivity().application as LessApp).preferences
-        return "${prefs.groupSize}-${prefs.browseMode}"
+        return "${prefs.groupSize}-${prefs.browseMode}-${prefs.favoritesOnly}"
     }
 
     private fun setupInsets() {
@@ -195,6 +193,8 @@ class PhotoHomeFragment : Fragment() {
         binding.albumName.text = albumLabel
         binding.albumPill.contentDescription =
             getString(R.string.album_pill_desc, albumLabel)
+        // 只看收藏时没有「相册」可选，直接隐藏。
+        binding.albumPill.isVisible = !preferences.favoritesOnly
 
         binding.countBadge.text = if (state.photos.isEmpty()) "0" else state.photos.size.toString()
         binding.loading.isVisible = state.loading && state.photos.isEmpty()
@@ -204,8 +204,11 @@ class PhotoHomeFragment : Fragment() {
         if (state.photos.isEmpty()) {
             binding.background.setImageDrawable(null)
             binding.emptyMessage.setText(
-                if (preferences.photoBucketId != null) R.string.album_empty_message
-                else R.string.photo_empty_message
+                when {
+                    preferences.favoritesOnly -> R.string.favorites_only_empty
+                    preferences.photoBucketId != null -> R.string.album_empty_message
+                    else -> R.string.photo_empty_message
+                }
             )
             return
         }
@@ -273,13 +276,13 @@ class PhotoHomeFragment : Fragment() {
         val photos = viewModel.state.value.photos
         if (photos.isEmpty()) return
         val app = requireActivity().application as LessApp
-        val mode = app.preferences.browseMode.name
-        val savedGroup = app.browseStore.currentGroupUris(mode)
+        val key = app.preferences.groupKey
+        val savedGroup = app.browseStore.currentGroupUris(key)
         val sameGroup = savedGroup.isNotEmpty() &&
             photos.all { it.uri.toString() in savedGroup }
         // 同一组照片再次进入时，从上次看到的位置继续。
         val remembered = if (sameGroup) {
-            app.browseStore.groupIndex(mode)
+            app.browseStore.groupIndex(key)
                 .coerceIn(0, photos.lastIndex.coerceAtLeast(0))
         } else {
             index.coerceIn(photos.indices)

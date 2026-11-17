@@ -50,6 +50,31 @@ class MediaRepository(
             }
         }
 
+    /**
+     * 只看收藏：返回「收藏」里的图片——我们复制到 Pictures/Less/Favorites 的那一份，
+     * 以及本地镜像里标记为收藏、但还没复制过的条目。
+     */
+    suspend fun loadFavoritePhotos(): Result<List<MediaItem>> =
+        withContext(Dispatchers.IO) {
+        try {
+            val favoriteUris = favorites?.favoriteUris().orEmpty()
+            val items = queryImages(includeFavorites = true)
+                .filter {
+                    it.uri.toString() in favoriteUris ||
+                        FolderFavorites.isInFavorites(it.relativePath)
+                }
+                .sortedWith(
+                    compareByDescending<MediaItem> { it.dateMillis }
+                        .thenByDescending { it.id }
+                )
+            Result.success(items)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
     /** 读取所有含照片的相册（按文件夹分组），用于首页的相册切换。 */
     suspend fun loadBuckets(): Result<List<MediaBucket>> = withContext(Dispatchers.IO) {
         try {

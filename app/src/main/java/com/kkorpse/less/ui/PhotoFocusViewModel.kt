@@ -97,6 +97,11 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun expand(page: FocusPage.Photo, onDone: (Int) -> Unit) {
         if (expanding) return
+        // 收藏模式只浏览收藏，展开会拉进普通照片，直接不生效。
+        if (app.preferences.favoritesOnly) {
+            onDone(0)
+            return
+        }
         if (photoPages.none { it.item.uri == page.item.uri }) return
         expanding = true
         viewModelScope.launch {
@@ -184,6 +189,18 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
         emit()
     }
 
+    /** 收藏模式：移出收藏后清掉这一组的待处理项，不计入删除数。 */
+    fun completeUnfavorite(items: List<MediaItem>) {
+        val uris = items.map { it.uri }.toSet()
+        if (uris.isEmpty()) return
+        pending.removeAll { it.item.uri in uris }
+        pending.clear()
+        persistPendingMarks()
+        busy = false
+        currentIndex = 0
+        emit()
+    }
+
     /** 汇总页「放弃，再来一组」：丢掉这一组的删除标记。 */
     fun discardGroup() {
         pending.clear()
@@ -196,7 +213,7 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
     /** 退出前标记的删除项，重新进入时恢复。 */
     private fun restorePendingMarks() {
         if (!autoNextGroup) return
-        val mode = app.preferences.browseMode.name
+        val mode = app.preferences.groupKey
         val saved = app.browseStore.pendingMarks(mode)
         if (saved.isEmpty()) return
         val byUri = photoPages.associateBy { it.item.uri.toString() }
@@ -213,13 +230,13 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
     /** 展开后这一组变大了，同步写回，退出重进仍是展开后的组。 */
     private fun persistCurrentGroup() {
         if (!autoNextGroup) return
-        val mode = app.preferences.browseMode.name
+        val mode = app.preferences.groupKey
         app.browseStore.setCurrentGroupUris(mode, photoPages.map { it.item.uri.toString() })
     }
 
     private fun persistPendingMarks() {
         if (!autoNextGroup) return
-        val mode = app.preferences.browseMode.name
+        val mode = app.preferences.groupKey
         app.browseStore.setPendingMarks(
             mode,
             pending.map { "${it.item.uri}|${it.originalIndex}" }

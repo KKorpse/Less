@@ -73,6 +73,11 @@ class SettingsActivity : AppCompatActivity() {
         // 展开只在随机模式下有意义，设置项跟着模式显隐。
         binding.expandWidthCard.isVisible = preferences.browseMode == BrowseMode.RANDOM
 
+        binding.favoritesOnlySwitch.isChecked = preferences.favoritesOnly
+        binding.favoritesOnlySwitch.setOnCheckedChangeListener { _, checked ->
+            preferences.favoritesOnly = checked
+        }
+
         binding.videoGroupSizeSlider.value = preferences.videoGroupSize.toFloat().coerceIn(3f, 30f)
         updateVideoGroupSizeLabel(preferences.videoGroupSize)
         binding.videoGroupSizeSlider.addOnChangeListener { _, value, _ ->
@@ -110,7 +115,7 @@ class SettingsActivity : AppCompatActivity() {
             preferences.browseMode = target
             // 只有「顺序 -> 随机」才换一组；随机 -> 顺序 要回到原来那一组。
             if (previous == BrowseMode.SEQUENTIAL && target == BrowseMode.RANDOM) {
-                app.browseStore.clearCurrentGroup(BrowseMode.RANDOM.name)
+                app.browseStore.clearCurrentGroup(preferences.groupKeyFor(BrowseMode.RANDOM))
             }
             binding.expandWidthCard.isVisible = target == BrowseMode.RANDOM
         }

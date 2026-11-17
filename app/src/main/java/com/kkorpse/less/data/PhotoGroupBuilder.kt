@@ -15,6 +15,11 @@ class PhotoGroupBuilder(
      * 不重新随机；否则按设置切一组新的并记下来。
      */
     suspend fun currentOrNewGroup(): Result<List<MediaItem>> {
+        if (preferences.favoritesOnly) {
+            return repository.loadFavoritePhotos().map { photos ->
+                restoreGroup(photos) ?: createGroup(photos)
+            }
+        }
         // 用户选的相册（文件夹）优先，没选就是系统相册全部照片。
         return repository.loadPhotos(preferences.photoBucketId).map { photos ->
             restoreGroup(photos) ?: createGroup(photos)
@@ -23,13 +28,16 @@ class PhotoGroupBuilder(
 
     /** 明确进入下一组：重新切一组并覆盖记录。 */
     suspend fun advanceGroup(): Result<List<MediaItem>> {
+        if (preferences.favoritesOnly) {
+            return repository.loadFavoritePhotos().map { photos -> createGroup(photos) }
+        }
         return repository.loadPhotos(preferences.photoBucketId).map { photos ->
             createGroup(photos)
         }
     }
 
     private fun restoreGroup(photos: List<MediaItem>): List<MediaItem>? {
-        val saved = store.currentGroupUris(preferences.browseMode.name)
+        val saved = store.currentGroupUris(preferences.groupKey)
         if (saved.isEmpty()) return null
         val byUri = photos.associateBy { it.uri.toString() }
         val restored = saved.mapNotNull { byUri[it] }
@@ -40,7 +48,7 @@ class PhotoGroupBuilder(
 
     private fun createGroup(photos: List<MediaItem>): List<MediaItem> {
         val group = selectGroup(photos, preferences.groupSize, preferences.browseMode)
-        store.setCurrentGroupUris(preferences.browseMode.name, group.map { it.uri.toString() })
+        store.setCurrentGroupUris(preferences.groupKey, group.map { it.uri.toString() })
         return group
     }
 
