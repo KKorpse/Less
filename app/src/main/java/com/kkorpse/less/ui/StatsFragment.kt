@@ -93,11 +93,10 @@ class StatsFragment : Fragment() {
 
             val photos = items.filter { !it.isVideo }
             val videos = items.filter { it.isVideo }
-            val viewedPhotos = app.browseStore.viewedUris(false)
-            val viewedVideos = app.browseStore.viewedUris(true)
 
-            val photoViewed = photos.count { it.uri.toString() in viewedPhotos }
-            val videoViewed = videos.count { it.uri.toString() in viewedVideos }
+            // 「查看」= 浏览总量：看过就算，删掉也不减，重复看不会重复计数。
+            val photoViewed = app.browseStore.viewedUris(false).size
+            val videoViewed = app.browseStore.viewedUris(true).size
             val deletedTotal = app.browseStore.deletedPhotoCount + app.browseStore.deletedVideoCount
 
             binding.photoTotal.text = Format.count(photos.size)
