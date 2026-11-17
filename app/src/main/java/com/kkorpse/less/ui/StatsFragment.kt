@@ -28,12 +28,22 @@ class StatsFragment : Fragment() {
     private var _binding: FragmentStatsBinding? = null
     private val binding get() = _binding!!
 
+    private var photoProgress: RectProgressDrawable? = null
+    private var videoProgress: RectProgressDrawable? = null
+
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentStatsBinding.inflate(inflater, container, false)
+        // 两张卡片本身就是进度条：边框从左上角开始按「已看过 / 总数」加粗。
+        photoProgress = RectProgressDrawable(requireContext()).also {
+            binding.photoCard.background = it
+        }
+        videoProgress = RectProgressDrawable(requireContext()).also {
+            binding.videoCard.background = it
+        }
         return binding.root
     }
 
@@ -100,8 +110,14 @@ class StatsFragment : Fragment() {
             val videos = items.filter { it.isVideo }
 
             // 「查看」= 浏览总量：看过就算，删掉也不减，重复看不会重复计数。
-            val photoViewed = app.browseStore.viewedUris(false).size
-            val videoViewed = app.browseStore.viewedUris(true).size
+            val viewedPhotoUris = app.browseStore.viewedUris(false)
+            val viewedVideoUris = app.browseStore.viewedUris(true)
+            val photoViewed = viewedPhotoUris.size
+            val videoViewed = viewedVideoUris.size
+
+            // 进度条：当前相册里已经看过的比例（删掉的照片不再计入分母）。
+            val photoSeen = photos.count { it.uri.toString() in viewedPhotoUris }
+            val videoSeen = videos.count { it.uri.toString() in viewedVideoUris }
             val deletedTotal = app.browseStore.deletedPhotoCount + app.browseStore.deletedVideoCount
 
             binding.photoTotal.text = Format.count(photos.size)
@@ -116,6 +132,12 @@ class StatsFragment : Fragment() {
                 R.string.stats_reset_subtitle,
                 photoViewed + videoViewed,
                 deletedTotal
+            )
+            photoProgress?.animateTo(
+                if (photos.isEmpty()) 0f else photoSeen / photos.size.toFloat()
+            )
+            videoProgress?.animateTo(
+                if (videos.isEmpty()) 0f else videoSeen / videos.size.toFloat()
             )
             binding.loading.isVisible = false
         }
