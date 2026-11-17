@@ -64,6 +64,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var lastDeleteItems: List<MediaItem> = emptyList()
     private var lastCleanupUris: List<Uri> = emptyList()
     private var expandRequesting = false
+    private var leftForGallery = false
     private var lastPreloadPosition = -1
     private var pages: List<FocusPage> = emptyList()
     private lateinit var favoriteController: FavoriteController
@@ -156,6 +157,8 @@ class PhotoFocusActivity : AppCompatActivity() {
 
     override fun onPause() {
         super.onPause()
+        // 用来判断"跳转相册"有没有真的把界面切走。
+        leftForGallery = true
         // 只记录从首页进入的组；收藏页进来的会话不覆盖首页进度。
         if (!PhotoFocusSession.autoNextGroup) return
         val app = application as LessApp
@@ -422,20 +425,9 @@ class PhotoFocusActivity : AppCompatActivity() {
             }
             Breadcrumbs.step(this, "openInGallery $label -> ${resolved ?: "none"} $outcome")
             if (result.isSuccess) {
-                // 打开成功也给一句反馈：如果相册没起来，至少能看出是交给了谁。
-                val packageName = resolved?.substringBefore('/')
-                val appLabel = packageName?.let { pkg ->
-                    runCatching {
-                        packageManager.getApplicationLabel(
-                            packageManager.getApplicationInfo(pkg, 0)
-                        ).toString()
-                    }.getOrNull()
-                }
-                Toast.makeText(
-                    this,
-                    getString(R.string.open_in_gallery_handoff, appLabel ?: "系统"),
-                    Toast.LENGTH_SHORT
-                ).show()
+                // startActivity 成功不代表真的切过去了：等 1.5s 看当前界面是否被换掉，
+                // 没换掉就明确告诉用户（而不是"点了没反应"）。
+                waitForGallerySwitch(resolved?.substringBefore('/'))
                 return
             }
             lastError = result.exceptionOrNull()
@@ -455,6 +447,46 @@ class PhotoFocusActivity : AppCompatActivity() {
         val chooser = Intent.createChooser(base, getString(R.string.photo_info_open_gallery))
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         runCatching { startActivity(chooser) }
+    }
+
+    private fun waitForGallerySwitch(packageName: String?) {
+        leftForGallery = false
+        binding.root.postDelayed({
+            if (isFinishing || isDestroyed) return@postDelayed
+            if (leftForGallery) return@postDelayed
+            Breadcrumbs.step(this, "openInGallery blocked: still foreground, target=$packageName")
+            showGalleryBlocked(packageName)
+        }, 1500L)
+    }
+
+    private fun showGalleryBlocked(packageName: String?) {
+        val label = packageName?.let { pkg ->
+            runCatching {
+                packageManager.getApplicationLabel(packageManager.getApplicationInfo(pkg, 0))
+                    .toString()
+            }.getOrNull()
+        } ?: "相册"
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.open_in_gallery_blocked_title)
+            .setMessage(getString(R.string.open_in_gallery_blocked_message, label))
+            .setPositiveButton(R.string.open_in_gallery_app) { _, _ ->
+                launchGalleryApp(packageName)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** 兜底：直接打开相册 App 的首页（不指定照片）。 */
+    private fun launchGalleryApp(packageName: String?) {
+        val candidates = listOfNotNull(packageName) + GALLERY_PACKAGES
+        for (pkg in candidates) {
+            val intent = packageManager.getLaunchIntentForPackage(pkg) ?: continue
+            if (runCatching { startActivity(intent) }.isSuccess) {
+                Breadcrumbs.step(this, "openInGallery fallback launch $pkg")
+                return
+            }
+        }
+        Toast.makeText(this, R.string.open_in_gallery_failed, Toast.LENGTH_SHORT).show()
     }
 
     /** 系统选择器（Photo Picker）给的 URI：别的应用没有读权限。 */

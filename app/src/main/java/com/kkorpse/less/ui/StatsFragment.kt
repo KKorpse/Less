@@ -115,9 +115,14 @@ class StatsFragment : Fragment() {
             val photoViewed = viewedPhotoUris.size
             val videoViewed = viewedVideoUris.size
 
-            // 进度条：当前相册里已经看过的比例（删掉的照片不再计入分母）。
-            val photoSeen = photos.count { it.uri.toString() in viewedPhotoUris }
-            val videoSeen = videos.count { it.uri.toString() in viewedVideoUris }
+            // 进度条跟卡片上的两个数字保持一致：查看 / 总数（累计看过 ÷ 当前相册张数），
+            // 看过的比相册张数还多（删过照片）时按 100% 显示。
+            val photoFraction = if (photos.isEmpty()) 0f else {
+                (photoViewed.toFloat() / photos.size).coerceIn(0f, 1f)
+            }
+            val videoFraction = if (videos.isEmpty()) 0f else {
+                (videoViewed.toFloat() / videos.size).coerceIn(0f, 1f)
+            }
             val deletedTotal = app.browseStore.deletedPhotoCount + app.browseStore.deletedVideoCount
 
             binding.photoTotal.text = Format.count(photos.size)
@@ -133,12 +138,8 @@ class StatsFragment : Fragment() {
                 photoViewed + videoViewed,
                 deletedTotal
             )
-            photoProgress?.animateTo(
-                if (photos.isEmpty()) 0f else photoSeen / photos.size.toFloat()
-            )
-            videoProgress?.animateTo(
-                if (videos.isEmpty()) 0f else videoSeen / videos.size.toFloat()
-            )
+            photoProgress?.animateTo(photoFraction)
+            videoProgress?.animateTo(videoFraction)
             binding.loading.isVisible = false
         }
     }

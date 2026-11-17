@@ -50,6 +50,9 @@
     <string name="photo_info_title">照片信息</string>
     <string name="photo_info_open_gallery">在系统相册中打开</string>
     <string name="open_in_gallery_failed">没有找到能打开这张图的相册应用</string>
+    <string name="open_in_gallery_blocked_title">没有切换到相册</string>
+    <string name="open_in_gallery_blocked_message">已经发起跳转（目标：%1$s），但系统没有切过去，可能被系统权限或应用锁挡住了。可以试试直接打开相册 App。</string>
+    <string name="open_in_gallery_app">直接打开相册 App</string>
     <string name="open_in_gallery_handoff">已交给「%1$s」打开</string>
     <string name="open_in_gallery_failed_detail">打不开系统相册（%1$s），已尝试改用系统选择器</string>
     <string name="open_in_gallery_picker_only">这张照片是系统选择器临时授权的，其他应用读不到，只在本应用内可见</string>
