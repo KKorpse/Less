@@ -50,6 +50,7 @@
     <string name="photo_info_title">照片信息</string>
     <string name="photo_info_open_gallery">在系统相册中打开</string>
     <string name="open_in_gallery_failed">没有找到能打开这张图的相册应用</string>
+    <string name="open_in_gallery_picker_only">这张照片是系统选择器临时授权的，其他应用读不到，只在本应用内可见</string>
     <string name="photo_info_desc">照片信息</string>
 
     <string name="review_title">回顾完毕</string>

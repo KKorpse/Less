@@ -22,6 +22,7 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.kkorpse.less.Breadcrumbs
 import com.kkorpse.less.Diagnostics
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
@@ -353,26 +354,62 @@ class PhotoFocusActivity : AppCompatActivity() {
     /**
      * 交给系统相册打开这张图。
      *
-     * 必须带 MIME type（`setDataAndType`）：只给 content:// 时部分 ROM 解析不出类型，
-     * 没有 Activity 能匹配，startActivity 直接抛异常，表现就是"点了没反应"。
+     * 两个坑：
+     * 1. 必须带 MIME type（`setDataAndType`），只给 content:// 时部分 ROM 解析不出类型；
+     * 2. 系统选择器（Photo Picker）临时授权的 URI 只有本应用能读，交给别的应用一定打不开，
+     *    这种情况直接说明原因，不发起一个注定失败的跳转。
      */
     private fun openInGallery(item: MediaItem) {
+        val uri = item.uri
+        if (isPickerUri(uri)) {
+            Breadcrumbs.step(this, "openInGallery picker-uri $uri")
+            Toast.makeText(this, R.string.open_in_gallery_picker_only, Toast.LENGTH_LONG).show()
+            return
+        }
+
         val type = item.mimeType.takeIf { it.isNotBlank() } ?: "image/*"
         val base = Intent(Intent.ACTION_VIEW)
-            .setDataAndType(item.uri, type)
+            .setDataAndType(uri, type)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        val candidates = buildList {
-            add(base)
-            GALLERY_PACKAGES.forEach { pkg -> add(Intent(base).setPackage(pkg)) }
-        }
-        var lastError: Throwable? = null
-        for (intent in candidates) {
+
+        val attempts = ArrayList<Pair<String, Intent>>()
+        attempts += "implicit" to base
+        GALLERY_PACKAGES.forEach { attempts += it to Intent(base).setPackage(it) }
+
+        val log = StringBuilder("openInGallery $uri ($type)")
+        for ((label, intent) in attempts) {
+            val resolved = runCatching {
+                packageManager.resolveActivity(intent, PackageManager.MATCH_DEFAULT_ONLY)
+                    ?.activityInfo?.let { info -> "${info.packageName}/${info.name}" }
+            }.getOrNull()
             val result = runCatching { startActivity(intent) }
-            if (result.isSuccess) return
-            lastError = result.exceptionOrNull()
+            log.append("\n  ").append(label).append(" -> ").append(resolved ?: "none")
+            if (result.isSuccess) {
+                log.append(" ok")
+                Breadcrumbs.step(this, log.toString())
+                return
+            }
+            log.append(" fail(")
+                .append(result.exceptionOrNull()?.javaClass?.simpleName)
+                .append(')')
         }
-        Diagnostics.recordError(item.uri.toString(), lastError)
-        Toast.makeText(this, R.string.open_in_gallery_failed, Toast.LENGTH_SHORT).show()
+        Breadcrumbs.step(this, log.toString())
+        Diagnostics.recordError(uri.toString(), null)
+
+        // 兜底：交给系统选择器，至少能看到"没有可用应用"这类反馈。
+        val chooser = Intent.createChooser(base, getString(R.string.photo_info_open_gallery))
+            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        val launched = runCatching { startActivity(chooser) }.isSuccess
+        if (!launched) {
+            Toast.makeText(this, R.string.open_in_gallery_failed, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** 系统选择器（Photo Picker）给的 URI：别的应用没有读权限。 */
+    private fun isPickerUri(uri: Uri): Boolean {
+        val authority = uri.authority ?: return false
+        if (authority.contains("photopicker", ignoreCase = true)) return true
+        return uri.path?.contains("/picker/") == true
     }
 
     private fun maybeRequestLocationPermission() {
