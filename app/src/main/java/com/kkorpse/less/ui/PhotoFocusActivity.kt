@@ -365,13 +365,17 @@ class PhotoFocusActivity : AppCompatActivity() {
             append("\n")
             append(binding.infoAddress.text)
         }
+        // 用自定义视图里的普通 TextView 触发，绕开系统弹窗按钮在某些 ROM 上点击不到的问题。
+        val dialogView = com.kkorpse.less.databinding.DialogPhotoInfoBinding.inflate(layoutInflater)
+        dialogView.infoDialogMessage.text = message
+        dialogView.infoDialogOpenGallery.setOnClickListener {
+            Breadcrumbs.step(this, "info dialog: gallery button tapped")
+            Toast.makeText(this, R.string.open_in_gallery_starting, Toast.LENGTH_SHORT).show()
+            openInGallery(page.item)
+        }
         MaterialAlertDialogBuilder(this)
             .setTitle(R.string.photo_info_title)
-            .setMessage(message)
-            .setNeutralButton(R.string.photo_info_open_gallery) { _, _ ->
-                Breadcrumbs.step(this, "info dialog: gallery button tapped")
-                openInGallery(page.item)
-            }
+            .setView(dialogView.root)
             .setPositiveButton(android.R.string.ok, null)
             .show()
     }
