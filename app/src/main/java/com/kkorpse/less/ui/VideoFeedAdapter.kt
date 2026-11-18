@@ -28,6 +28,7 @@ import com.kkorpse.less.util.dp
  * 汇总页在组尾统一确认删除。
  */
 class VideoFeedAdapter(
+    private val onTap: () -> Unit,
     private val onBatchDelete: () -> Unit,
     private val onUndoBatch: () -> Unit,
     private val onNextGroup: () -> Unit,
@@ -122,6 +123,8 @@ class VideoFeedAdapter(
         fun bind(item: MediaItem) {
             binding.error.isVisible = false
             binding.thumbnail.alpha = 1f
+            binding.zoom.reset()
+            binding.zoom.onTap = onTap
             binding.player.player = null
             binding.player.visibility = View.INVISIBLE
             binding.thumbnail.load(item.uri) {

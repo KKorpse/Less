@@ -122,6 +122,7 @@ class VideoFeedFragment : Fragment() {
         }
 
         adapter = VideoFeedAdapter(
+            onTap = ::togglePlayback,
             onBatchDelete = ::requestBatchDelete,
             onUndoBatch = ::requestBatchUndo,
             onNextGroup = ::nextGroup,
@@ -558,6 +559,14 @@ class VideoFeedFragment : Fragment() {
         binding.undoAction.isEnabled = canUndo
         binding.undoAction.alpha = if (canUndo) 1f else 0.4f
         binding.emptyUndo.isVisible = false
+    }
+
+    /** 点一下视频：暂停 / 继续。 */
+    private fun togglePlayback() {
+        if (!::player.isInitialized) return
+        if (currentPage() !is VideoPage.Video) return
+        if (player.isPlaying) player.pause() else player.play()
+        updatePlayIndicator()
     }
 
     private fun updatePlayIndicator() {

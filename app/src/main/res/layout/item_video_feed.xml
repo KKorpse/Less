@@ -5,23 +5,35 @@
     android:layout_height="match_parent"
     android:background="@color/black">
 
-    <ImageView
-        android:id="@+id/thumbnail"
+    <com.kkorpse.less.ui.ZoomableVideoLayout
+        android:id="@+id/zoom"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:contentDescription="@null"
-        android:scaleType="fitCenter" />
+        android:layout_height="match_parent">
 
-    <androidx.media3.ui.PlayerView
-        android:id="@+id/player"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:background="@android:color/transparent"
-        app:keep_content_on_player_reset="true"
-        app:resize_mode="fit"
-        app:shutter_background_color="@android:color/transparent"
-        app:surface_type="surface_view"
-        app:use_controller="false" />
+        <FrameLayout
+            android:id="@+id/videoFrame"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <ImageView
+                android:id="@+id/thumbnail"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:contentDescription="@null"
+                android:scaleType="fitCenter" />
+
+            <androidx.media3.ui.PlayerView
+                android:id="@+id/player"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:background="@android:color/transparent"
+                app:keep_content_on_player_reset="true"
+                app:resize_mode="fit"
+                app:shutter_background_color="@android:color/transparent"
+                app:surface_type="texture_view"
+                app:use_controller="false" />
+        </FrameLayout>
+    </com.kkorpse.less.ui.ZoomableVideoLayout>
 
     <TextView
         android:id="@+id/error"
