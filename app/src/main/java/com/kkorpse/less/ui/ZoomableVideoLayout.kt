@@ -15,7 +15,7 @@ import android.widget.FrameLayout
  *
  * - 缩放作用在唯一的子 View（视频帧）上，pivot 放在左上角，方便按焦点换算；
  * - 放大时不允许页面上下翻，缩回 1x 后把手势还给 ViewPager；
- * - 缩到比原始尺寸还小时，松手自动弹回 1x。
+ * - 不允许缩到比原始尺寸更小（一过 1x 就停在 1x）。
  */
 class ZoomableVideoLayout @JvmOverloads constructor(
     context: Context,
@@ -208,8 +208,8 @@ class ZoomableVideoLayout @JvmOverloads constructor(
     }
 
     private companion object {
-        /** 缩到多小算“过小”，松手弹回 1x。 */
-        const val MIN_SCALE = 0.5f
+        /** 最小就是原始尺寸：比 1x 小一律回到 1x。 */
+        const val MIN_SCALE = 1f
         const val MAX_SCALE = 4f
     }
 }
