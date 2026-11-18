@@ -31,6 +31,8 @@ class ZoomableVideoLayout @JvmOverloads constructor(
     private var offsetY = 0f
     private var lastX = 0f
     private var lastY = 0f
+    /** 单指平移是否已经真正开始：多指抬起后要先校准一次，避免第一帧跳一下。 */
+    private var panning = false
     private var animator: ValueAnimator? = null
 
     private val content: View? get() = getChildAt(0)
@@ -40,8 +42,14 @@ class ZoomableVideoLayout @JvmOverloads constructor(
         object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
             override fun onScaleBegin(detector: ScaleGestureDetector): Boolean {
                 stopAnimation()
+                panning = false
                 parent?.requestDisallowInterceptTouchEvent(true)
                 return true
+            }
+
+            override fun onScaleEnd(detector: ScaleGestureDetector) {
+                // 双指结束：剩下的那根手指重新作为平移起点，不沿用捏合时的坐标。
+                panning = false
             }
 
             override fun onScale(detector: ScaleGestureDetector): Boolean {
@@ -88,32 +96,46 @@ class ZoomableVideoLayout @JvmOverloads constructor(
         when (ev.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 stopAnimation()
+                panning = false
                 lastX = ev.x
                 lastY = ev.y
                 parent?.requestDisallowInterceptTouchEvent(isZoomed())
             }
 
             MotionEvent.ACTION_POINTER_DOWN -> {
+                panning = false
                 parent?.requestDisallowInterceptTouchEvent(true)
             }
 
             MotionEvent.ACTION_MOVE -> {
                 if (!scaleDetector.isInProgress && ev.pointerCount == 1 && isZoomed()) {
-                    offsetX += ev.x - lastX
-                    offsetY += ev.y - lastY
-                    clampOffsets()
-                    applyTransform()
+                    if (!panning) {
+                        // 刚抬掉一根手指：先把起点对齐到剩下这根手指，再开始平移。
+                        panning = true
+                        lastX = ev.x
+                        lastY = ev.y
+                    } else {
+                        offsetX += ev.x - lastX
+                        offsetY += ev.y - lastY
+                        clampOffsets()
+                        applyTransform()
+                        lastX = ev.x
+                        lastY = ev.y
+                    }
+                } else {
+                    lastX = ev.x
+                    lastY = ev.y
                 }
-                lastX = ev.x
-                lastY = ev.y
             }
 
             MotionEvent.ACTION_POINTER_UP -> {
+                panning = false
                 lastX = ev.x
                 lastY = ev.y
             }
 
             MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                panning = false
                 settle()
             }
         }
