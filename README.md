@@ -78,7 +78,7 @@
 「使用统计」页面：
 
 - 照片、视频两张卡片
-- 每张卡片：**总数 / 查看 / 删除**；「总数」包含收藏里的照片，「查看」是浏览总量（覆盖重复观看；删除的会从查看里扣掉，所以不会超过总数）
+- 每张卡片：**总数 / 查看 / 删除**；「总数」包含收藏里的照片，「查看」= 现存媒体里看过的数量（看过、去重、删除即不算，永远不会超过总数）
 - 卡片边框本身就是进度条：从左上角顺时针按「查看 ÷ 总数」加粗，看满一圈就是 100%
 - 查看、删除带蓝色/红色图标
 - 底部「重置浏览记录」卡片显示已查看/已删除数量，点击确认后清空已查看标记
@@ -125,7 +125,7 @@
 | --- | --- |
 | 目标设备 | OPPO Pad Mini（OPD2515） |
 | 系统 | ColorOS 16.0 / Android 16 / API 36 |
-| 当前版本 | 2.6.4（versionCode 87） |
+| 当前版本 | 2.6.5（versionCode 88） |
 | compileSdk / targetSdk | 36 |
 | minSdk | 29（Android 10） |
 | 语言 | Kotlin |
@@ -148,7 +148,7 @@ export JAVA_HOME=/opt/homebrew/opt/openjdk@17
 产物：
 
 ```
-app/build/outputs/apk/debug/Less-v2.6.4-debug.apk
+app/build/outputs/apk/debug/Less-v2.6.5-debug.apk
 ```
 
 仓库的 `dist/` 保留每个版本：
@@ -225,14 +225,14 @@ dist/Less-v2.3.3-debug.apk
 dist/Less-v2.3.4-debug.apk
 dist/Less-v2.3.5-debug.apk
 dist/Less-v2.4.0-debug.apk
-dist/Less-v2.6.4-debug.apk
+dist/Less-v2.6.5-debug.apk
 dist/SHA256SUMS.txt
 ```
 
 ## 安装到平板
 
 ```bash
-~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.6.4-debug.apk
+~/Library/Android/sdk/platform-tools/adb install -r dist/Less-v2.6.5-debug.apk
 ~/Library/Android/sdk/platform-tools/adb shell am start -n com.kkorpse.less/.ui.MainActivity
 ```
 
@@ -252,7 +252,7 @@ dist/SHA256SUMS.txt
 - 验证签名：
 
   ```bash
-  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.6.4-debug.apk
+  apksigner verify --print-certs app/build/outputs/apk/debug/Less-v2.6.5-debug.apk
   ```
 
 - **一次性切换**：2.2.3 及更早的 `dist/` 包是原作者机器的 debug keystore 签的，与统一签名不一致，第一次装 2.2.4 必须先卸载旧包（卸载前可按下面的命令备份应用数据）。
@@ -268,7 +268,7 @@ adb exec-out run-as $PKG cat shared_prefs/less_browse.xml > less_browse.xml
 adb exec-out run-as $PKG cat shared_prefs/less_settings.xml > less_settings.xml
 
 adb uninstall $PKG
-adb install -r dist/Less-v2.6.4-debug.apk
+adb install -r dist/Less-v2.6.5-debug.apk
 
 adb shell am force-stop $PKG
 adb shell run-as $PKG mkdir -p shared_prefs

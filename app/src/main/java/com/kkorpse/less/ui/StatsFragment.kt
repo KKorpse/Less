@@ -109,11 +109,12 @@ class StatsFragment : Fragment() {
             val photos = items.filter { !it.isVideo }
             val videos = items.filter { it.isVideo }
 
-            // 「查看」= 浏览总量：看过就算，删掉也不减，重复看不会重复计数。
+            // 「查看」= 现存媒体里看过的数量（浏览记录和现存媒体求交集）：
+            // 看过就算、重复看不重复计、删掉的自动不算，所以永远不会超过总数。
             val viewedPhotoUris = app.browseStore.viewedUris(false)
             val viewedVideoUris = app.browseStore.viewedUris(true)
-            val photoViewed = viewedPhotoUris.size
-            val videoViewed = viewedVideoUris.size
+            val photoViewed = photos.count { it.uri.toString() in viewedPhotoUris }
+            val videoViewed = videos.count { it.uri.toString() in viewedVideoUris }
 
             // 进度条跟卡片上的两个数字保持一致：查看 / 总数（累计看过 ÷ 当前相册张数），
             // 看过的比相册张数还多（删过照片）时按 100% 显示。
