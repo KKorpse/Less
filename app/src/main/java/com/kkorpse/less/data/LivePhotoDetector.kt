@@ -89,20 +89,22 @@ object LivePhotoDetector {
         return set
     }
 
+    private fun readHead(context: Context, item: MediaItem): String? = runCatching {
+        context.contentResolver.openInputStream(item.uri)?.use { input ->
+            val buffer = ByteArray(HEADER_BYTES)
+            var read = 0
+            while (read < buffer.size) {
+                val count = input.read(buffer, read, buffer.size - read)
+                if (count <= 0) break
+                read += count
+            }
+            String(buffer, 0, read, Charsets.ISO_8859_1)
+        }
+    }.getOrNull()
+
     private fun detect(context: Context, item: MediaItem): Long {
         if (!item.mimeType.startsWith("image/")) return 0
-        val head = runCatching {
-            context.contentResolver.openInputStream(item.uri)?.use { input ->
-                val buffer = ByteArray(HEADER_BYTES)
-                var read = 0
-                while (read < buffer.size) {
-                    val count = input.read(buffer, read, buffer.size - read)
-                    if (count <= 0) break
-                    read += count
-                }
-                String(buffer, 0, read, Charsets.ISO_8859_1)
-            }
-        }.getOrNull() ?: return 0
+        val head = readHead(context, item) ?: return 0
 
         val length = parseMotionPhotoLength(head)
         if (length <= 0L) return 0
@@ -132,6 +134,35 @@ object LivePhotoDetector {
             } ?: false
         }.getOrDefault(false)
     }
+
+    /**
+     * 诊断：对给定的一批照片重新识别一遍（忽略缓存），返回可读报告。
+     * 用于排查「某张图为什么被判成 / 没被判成 Live 图」。
+     */
+    suspend fun diagnose(context: Context, items: List<MediaItem>): String =
+        withContext(Dispatchers.IO) {
+            val live = ArrayList<String>()
+            val rejected = ArrayList<String>()
+            var scanned = 0
+            items.forEach { item ->
+                if (!item.mimeType.startsWith("image/")) return@forEach
+                val head = readHead(context, item) ?: return@forEach
+                scanned++
+                val parsed = parseMotionPhotoLength(head)
+                val tail = if (parsed > 0) hasMp4Tail(context, item.uri, item.sizeBytes, parsed) else false
+                val info = "${item.name} size=${item.sizeBytes} video=$parsed ftyp=$tail"
+                when {
+                    parsed > 0 && tail -> live += info
+                    head.contains("MotionPhoto") -> rejected += info
+                }
+            }
+            buildString {
+                appendLine("live scan: $scanned / ${items.size}")
+                appendLine("live=${live.size} rejected-with-marker=${rejected.size}")
+                live.take(40).forEach { appendLine("LIVE $it") }
+                rejected.take(40).forEach { appendLine("SKIP $it") }
+            }
+        }
 
     /** 从文件头的 XMP 里解析视频段长度；不是动态照片返回 0。 */
     internal fun parseMotionPhotoLength(head: String): Long {

@@ -161,7 +161,7 @@ class DeckCardView @JvmOverloads constructor(
             MotionEvent.ACTION_DOWN -> {
                 downX = ev.x
                 downY = ev.y
-                if (canPlayLive()) postDelayed(longPressRunnable, longPressTimeout)
+                if (page is FocusPage.Photo) postDelayed(longPressRunnable, longPressTimeout)
             }
 
             MotionEvent.ACTION_MOVE -> {
@@ -184,15 +184,14 @@ class DeckCardView @JvmOverloads constructor(
         removeCallbacks(longPressRunnable)
     }
 
-    private fun canPlayLive(): Boolean {
-        val item = (page as? FocusPage.Photo)?.item ?: return false
-        return LivePhotoDetector.videoLengthOf(context, item.uri) > 0
-    }
-
     /** 长按播放内嵌在 JPEG 末尾的那段视频。 */
     private fun startLivePlayback() {
         val item = (page as? FocusPage.Photo)?.item ?: return
         val length = LivePhotoDetector.videoLengthOf(context, item.uri)
+        com.kkorpse.less.Breadcrumbs.step(
+            context,
+            "live longPress ${item.name} video=$length size=${item.sizeBytes}"
+        )
         if (length <= 0L) return
         val player = livePlayer ?: ExoPlayer.Builder(context).build().apply {
             repeatMode = Player.REPEAT_MODE_ONE

@@ -67,6 +67,9 @@
     <string name="settings_favorites_only">只看收藏的图片</string>
     <string name="settings_favorites_only_hint">照片模式只浏览「收藏」里的图片；这里的删除等于移出收藏，照片会变回普通照片</string>
     <string name="favorites_only_empty">收藏里还没有照片</string>
+    <string name="settings_live_check">Live 图诊断（复制）</string>
+    <string name="settings_live_check_started">正在扫描 Live 图…</string>
+    <string name="settings_live_check_done">诊断结果已复制</string>
     <string name="photo_category_title">选择照片类型</string>
     <string name="photo_category_normal">普通照片</string>
     <string name="photo_category_live">Live 图</string>

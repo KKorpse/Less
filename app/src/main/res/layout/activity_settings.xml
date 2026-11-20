@@ -398,13 +398,27 @@
                     android:textColor="@color/text_secondary"
                     android:textSize="13sp" />
 
-                <com.google.android.material.button.MaterialButton
-                    android:id="@+id/diagnosticsButton"
-                    style="@style/Widget.Less.Button.Secondary"
+                <LinearLayout
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:layout_marginTop="16dp"
-                    android:text="@string/settings_diagnostics" />
+                    android:orientation="horizontal">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/diagnosticsButton"
+                        style="@style/Widget.Less.Button.Secondary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:text="@string/settings_diagnostics" />
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/liveCheckButton"
+                        style="@style/Widget.Less.Button.Secondary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_marginStart="8dp"
+                        android:text="@string/settings_live_check" />
+                </LinearLayout>
             </LinearLayout>
 
             <TextView

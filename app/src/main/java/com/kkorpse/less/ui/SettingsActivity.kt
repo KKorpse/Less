@@ -4,6 +4,8 @@ import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AppCompatActivity
@@ -41,6 +43,32 @@ class SettingsActivity : AppCompatActivity() {
 
         setupInsets()
         binding.back.setOnClickListener { finish() }
+        binding.liveCheckButton.setOnClickListener {
+            val app2 = application as LessApp
+            Toast.makeText(this, R.string.settings_live_check_started, Toast.LENGTH_SHORT).show()
+            lifecycleScope.launch {
+                val repo = com.kkorpse.less.data.MediaRepository(
+                    this@SettingsActivity,
+                    app2.browseStore
+                )
+                val items = repo.loadEverything().getOrElse { emptyList() }
+                val report = com.kkorpse.less.data.LivePhotoDetector.diagnose(
+                    this@SettingsActivity,
+                    items
+                )
+                val version = runCatching {
+                    packageManager.getPackageInfo(packageName, 0).versionName
+                }.getOrNull().orEmpty()
+                val header = "app: $version\n"
+                val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                clipboard.setPrimaryClip(ClipData.newPlainText("Less live check", header + report))
+                Toast.makeText(
+                    this@SettingsActivity,
+                    R.string.settings_live_check_done,
+                    Toast.LENGTH_SHORT
+                ).show()
+            }
+        }
         binding.diagnosticsButton.setOnClickListener {
             val text = com.kkorpse.less.Diagnostics.report(this)
             val clipboard = getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager

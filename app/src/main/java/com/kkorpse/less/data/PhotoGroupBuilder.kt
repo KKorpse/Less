@@ -18,26 +18,27 @@ class PhotoGroupBuilder(
      * 不重新随机；否则按设置切一组新的并记下来。
      */
     suspend fun currentOrNewGroup(): Result<List<MediaItem>> {
-        if (preferences.favoritesOnly) {
-            return repository.loadFavoritePhotos().map { photos ->
-                restoreGroup(photos) ?: createGroup(photos)
-            }
-        }
-        // 用户选的相册（文件夹）优先，没选就是系统相册全部照片。
-        return repository.loadPhotos(preferences.photoBucketId).map { photos ->
-            restoreGroup(photos) ?: createGroup(photos)
-        }
+        val loaded = loadSource()
+        val photos = loaded.getOrElse { return Result.failure(it) }
+        val selected = filterByCategory(photos)
+        return Result.success(restoreGroup(selected) ?: createGroup(selected))
     }
 
     /** 明确进入下一组：重新切一组并覆盖记录。 */
     suspend fun advanceGroup(): Result<List<MediaItem>> {
-        if (preferences.favoritesOnly) {
-            return repository.loadFavoritePhotos().map { photos -> createGroup(photos) }
-        }
-        return repository.loadPhotos(preferences.photoBucketId).map { photos ->
-            createGroup(photos)
-        }
+        val loaded = loadSource()
+        val photos = loaded.getOrElse { return Result.failure(it) }
+        val selected = filterByCategory(photos)
+        return Result.success(createGroup(selected))
     }
+
+    private suspend fun loadSource(): Result<List<MediaItem>> =
+        if (preferences.favoritesOnly) {
+            repository.loadFavoritePhotos()
+        } else {
+            // 用户选的相册（文件夹）优先，没选就是系统相册全部照片。
+            repository.loadPhotos(preferences.photoBucketId)
+        }
 
     /**
      * 按「普通照片 / Live 图」筛选。识别结果会缓存，只有新增照片需要重新读文件头。
