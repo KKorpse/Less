@@ -1,7 +1,9 @@
 package com.kkorpse.less.data
 
+import android.content.ContentUris
 import android.content.Context
 import android.net.Uri
+import android.provider.MediaStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
@@ -89,8 +91,8 @@ object LivePhotoDetector {
         return set
     }
 
-    private fun readHead(context: Context, item: MediaItem): String? = runCatching {
-        context.contentResolver.openInputStream(item.uri)?.use { input ->
+    private fun readHead(context: Context, uri: Uri): String? = runCatching {
+        context.contentResolver.openInputStream(uri)?.use { input ->
             val buffer = ByteArray(HEADER_BYTES)
             var read = 0
             while (read < buffer.size) {
@@ -104,7 +106,7 @@ object LivePhotoDetector {
 
     private fun detect(context: Context, item: MediaItem): Long {
         if (!item.mimeType.startsWith("image/")) return 0
-        val head = readHead(context, item) ?: return 0
+        val head = readHead(context, item.uri) ?: return 0
 
         val length = parseMotionPhotoLength(head)
         if (length <= 0L) return 0
@@ -136,6 +138,52 @@ object LivePhotoDetector {
     }
 
     /**
+     * 找出「在系统回收站里、并且是 Live 图」的那些照片。
+     * 先查识别缓存；缓存里没有的（比如旧版本删掉的）再尝试读文件头判断。
+     */
+    suspend fun findTrashedLivePhotos(context: Context): List<Uri> =
+        withContext(Dispatchers.IO) {
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) {
+                return@withContext emptyList()
+            }
+            val resolver = context.contentResolver
+            val args = android.os.Bundle().apply {
+                putInt(MediaStore.QUERY_ARG_MATCH_TRASHED, MediaStore.MATCH_ONLY)
+            }
+            val projection = arrayOf(
+                MediaStore.MediaColumns._ID,
+                MediaStore.MediaColumns.SIZE
+            )
+            val found = ArrayList<Uri>()
+            runCatching {
+                resolver.query(
+                    MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                    projection,
+                    args,
+                    null
+                )?.use { cursor ->
+                    while (cursor.moveToNext()) {
+                        val uri = ContentUris.withAppendedId(
+                            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+                            cursor.getLong(0)
+                        )
+                        if (videoLengthOf(context, uri) > 0) {
+                            found += uri
+                            continue
+                        }
+                        val size = cursor.getLong(1)
+                        val head = readHead(context, uri) ?: continue
+                        val length = parseMotionPhotoLength(head)
+                        if (length > 0 && hasMp4Tail(context, uri, size, length)) {
+                            found += uri
+                        }
+                    }
+                }
+            }
+            found
+        }
+
+    /**
      * 诊断：对给定的一批照片重新识别一遍（忽略缓存），返回可读报告。
      * 用于排查「某张图为什么被判成 / 没被判成 Live 图」。
      */
@@ -146,7 +194,7 @@ object LivePhotoDetector {
             var scanned = 0
             items.forEach { item ->
                 if (!item.mimeType.startsWith("image/")) return@forEach
-                val head = readHead(context, item) ?: return@forEach
+                val head = readHead(context, item.uri) ?: return@forEach
                 scanned++
                 val parsed = parseMotionPhotoLength(head)
                 val tail = if (parsed > 0) hasMp4Tail(context, item.uri, item.sizeBytes, parsed) else false

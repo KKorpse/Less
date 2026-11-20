@@ -17,6 +17,7 @@ import androidx.core.view.updatePadding
 import com.kkorpse.less.LessApp
 import com.kkorpse.less.R
 import com.kkorpse.less.databinding.ActivitySettingsBinding
+import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.kkorpse.less.prefs.AppPreferences
 import com.kkorpse.less.prefs.BrowseMode
 import com.kkorpse.less.prefs.DoubleTapAction
@@ -26,6 +27,8 @@ import kotlin.math.roundToInt
 class SettingsActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivitySettingsBinding
+    private lateinit var restoreController: BatchTrashController
+    private var restoringUris: List<android.net.Uri> = emptyList()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
@@ -43,6 +46,24 @@ class SettingsActivity : AppCompatActivity() {
 
         setupInsets()
         binding.back.setOnClickListener { finish() }
+        restoreController = BatchTrashController(this, this) { trash, success ->
+            if (trash) return@BatchTrashController
+            if (success) {
+                val store = (application as LessApp).browseStore
+                restoringUris.forEach { store.unmarkViewed(it, false) }
+                Toast.makeText(
+                    this,
+                    getString(R.string.settings_restore_live_done, restoringUris.size),
+                    Toast.LENGTH_SHORT
+                ).show()
+            } else {
+                Toast.makeText(this, R.string.batch_restore_failed, Toast.LENGTH_SHORT).show()
+            }
+            restoringUris = emptyList()
+        }
+
+        binding.restoreLiveButton.setOnClickListener { confirmRestoreLivePhotos() }
+
         binding.liveCheckButton.setOnClickListener {
             val app2 = application as LessApp
             Toast.makeText(this, R.string.settings_live_check_started, Toast.LENGTH_SHORT).show()
@@ -152,6 +173,37 @@ class SettingsActivity : AppCompatActivity() {
             packageManager.getPackageInfo(packageName, 0).versionName
         }.getOrNull().orEmpty()
         binding.version.text = getString(R.string.settings_version, versionName)
+    }
+
+    private fun confirmRestoreLivePhotos() {
+        lifecycleScope.launch {
+            Toast.makeText(
+                this@SettingsActivity,
+                R.string.settings_restore_live_scanning,
+                Toast.LENGTH_SHORT
+            ).show()
+            val uris = com.kkorpse.less.data.LivePhotoDetector
+                .findTrashedLivePhotos(this@SettingsActivity)
+            if (uris.isEmpty()) {
+                Toast.makeText(
+                    this@SettingsActivity,
+                    R.string.settings_restore_live_empty,
+                    Toast.LENGTH_SHORT
+                ).show()
+                return@launch
+            }
+            MaterialAlertDialogBuilder(this@SettingsActivity)
+                .setTitle(R.string.settings_restore_live_title)
+                .setMessage(
+                    getString(R.string.settings_restore_live_message, uris.size)
+                )
+                .setPositiveButton(R.string.settings_restore_live_confirm) { _, _ ->
+                    restoringUris = uris
+                    restoreController.requestUris(uris, trash = false)
+                }
+                .setNegativeButton(android.R.string.cancel, null)
+                .show()
+        }
     }
 
     private fun setupInsets() {

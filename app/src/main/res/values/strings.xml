@@ -68,6 +68,13 @@
     <string name="settings_favorites_only_hint">照片模式只浏览「收藏」里的图片；这里的删除等于移出收藏，照片会变回普通照片</string>
     <string name="favorites_only_empty">收藏里还没有照片</string>
     <string name="settings_live_check">Live 图诊断（复制）</string>
+    <string name="settings_restore_live">恢复回收站里的 Live 图</string>
+    <string name="settings_restore_live_scanning">正在查找回收站里的 Live 图…</string>
+    <string name="settings_restore_live_empty">回收站里没有找到 Live 图</string>
+    <string name="settings_restore_live_title">恢复 Live 图</string>
+    <string name="settings_restore_live_message">找到 %1$d 张还在回收站里的 Live 图。恢复后它们会回到相册，并清除已浏览标记（可以重新浏览）。系统会弹一次确认框。</string>
+    <string name="settings_restore_live_confirm">恢复</string>
+    <string name="settings_restore_live_done">已恢复 %1$d 张 Live 图，并清除浏览标记</string>
     <string name="settings_live_check_started">正在扫描 Live 图…</string>
     <string name="settings_live_check_done">诊断结果已复制</string>
     <string name="photo_category_title">选择照片类型</string>

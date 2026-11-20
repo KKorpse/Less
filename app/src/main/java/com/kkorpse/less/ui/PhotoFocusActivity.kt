@@ -66,6 +66,9 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var lastCleanupUris: List<Uri> = emptyList()
     private var expandRequesting = false
     private var leftForGallery = false
+    /** 正在单独清理「已收藏照片的原图」（组尾没有待删照片时也会跑一次）。 */
+    private var cleanupOnly = false
+    private var pendingCleanupUris: List<Uri> = emptyList()
     private var lastPreloadPosition = -1
     private var pages: List<FocusPage> = emptyList()
     private lateinit var favoriteController: FavoriteController
@@ -319,7 +322,7 @@ class PhotoFocusActivity : AppCompatActivity() {
                 val hasPhotos = pages.any { it is FocusPage.Photo }
                 if (page.pending.isEmpty() && !page.busy && viewModel.autoNextGroup) {
                     if (hasPhotos) {
-                        viewModel.loadNextGroup()
+                        advanceAfterGroup()
                     } else {
                         finish()
                     }
@@ -668,7 +671,30 @@ class PhotoFocusActivity : AppCompatActivity() {
         advanceAfterGroup()
     }
 
+    /**
+     * 进入下一组前，先把「已收藏照片的原图」清理掉（收藏是复制一份，不清理就会有两份）。
+     * 原图不是我们建的，系统会弹一次「移入回收站」的确认框。
+     */
     private fun advanceAfterGroup() {
+        if (batchController.isBusy || cleanupOnly) {
+            advanceGroupNow()
+            return
+        }
+        val cleanup = (application as LessApp).browseStore.pendingCleanupUris()
+        if (cleanup.isNotEmpty()) {
+            val uris = cleanup.mapNotNull { runCatching { Uri.parse(it) }.getOrNull() }
+            if (uris.isNotEmpty()) {
+                cleanupOnly = true
+                pendingCleanupUris = uris
+                viewModel.setBatchBusy(true)
+                batchController.requestUris(uris, trash = true)
+                return
+            }
+        }
+        advanceGroupNow()
+    }
+
+    private fun advanceGroupNow() {
         if (viewModel.autoNextGroup) {
             viewModel.loadNextGroup()
         } else {
@@ -677,6 +703,16 @@ class PhotoFocusActivity : AppCompatActivity() {
     }
 
     private fun handleBatchResult(trash: Boolean, success: Boolean) {
+        if (cleanupOnly) {
+            cleanupOnly = false
+            viewModel.setBatchBusy(false)
+            if (success) {
+                (application as LessApp).browseStore.removePendingCleanup(pendingCleanupUris)
+            }
+            pendingCleanupUris = emptyList()
+            advanceGroupNow()
+            return
+        }
         if (!success) {
             viewModel.setBatchBusy(false)
             refreshUndo()
