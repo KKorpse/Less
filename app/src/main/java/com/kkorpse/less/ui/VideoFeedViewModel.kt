@@ -75,12 +75,14 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
                     if (all.isEmpty()) {
                         groupSize = 0
                     } else {
+                        // 看过的视频不再重复出现（和照片同一套规则），想重看要重置浏览记录。
                         val start = app.browseStore.videoCursor % all.size
                         val group = ArrayList<MediaItem>(size)
                         var index = start
                         var visited = 0
                         while (visited < all.size && group.size < size) {
-                            group += all[index]
+                            val item = all[index]
+                            if (!app.browseStore.isViewed(item.uri, true)) group += item
                             index = (index + 1) % all.size
                             visited++
                         }

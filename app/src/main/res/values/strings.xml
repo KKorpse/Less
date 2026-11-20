@@ -150,6 +150,7 @@
 
     <string name="video_empty_title">还没有视频</string>
     <string name="video_empty_message">相册里没有找到视频。</string>
+    <string name="video_all_viewed_message">视频都看过了，去「统计 → 重置浏览记录」可以重新开始。</string>
     <string name="video_loading">正在准备视频…</string>
     <string name="video_position">%1$d / %2$d</string>
 

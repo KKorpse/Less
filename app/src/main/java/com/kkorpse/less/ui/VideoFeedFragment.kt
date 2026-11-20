@@ -266,6 +266,16 @@ class VideoFeedFragment : Fragment() {
                     // 组里视频全被标记删除时也要能进汇总页，不能当成空列表。
                     val empty = !state.loading && !hasVideo && !hasMarks
                     binding.emptyPanel.isVisible = empty
+                    if (empty) {
+                        val app = requireActivity().application as LessApp
+                        binding.emptyMessage.setText(
+                            if (app.browseStore.viewedUris(true).isNotEmpty()) {
+                                R.string.video_all_viewed_message
+                            } else {
+                                R.string.video_empty_message
+                            }
+                        )
+                    }
                     binding.videoActions.isVisible = hasVideo
                     binding.videoTime.isVisible = hasVideo
 
