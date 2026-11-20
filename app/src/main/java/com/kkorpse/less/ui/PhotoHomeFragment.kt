@@ -32,6 +32,7 @@ import com.kkorpse.less.data.MediaRepository
 import com.kkorpse.less.data.PhotoFocusSession
 import com.kkorpse.less.databinding.FragmentPhotoHomeBinding
 import com.kkorpse.less.prefs.BrowseMode
+import com.kkorpse.less.prefs.PhotoCategory
 import com.kkorpse.less.util.dp
 import kotlinx.coroutines.launch
 
@@ -76,6 +77,7 @@ class PhotoHomeFragment : Fragment() {
             startActivity(Intent(requireContext(), SettingsActivity::class.java))
         }
         binding.albumPill.setOnClickListener { showAlbumPicker() }
+        binding.categoryPill.setOnClickListener { showCategoryPicker() }
         binding.emptyRefresh.setOnClickListener {
             viewModel.load(force = true)
         }
@@ -116,6 +118,26 @@ class PhotoHomeFragment : Fragment() {
                 .setNegativeButton(android.R.string.cancel, null)
                 .show()
         }
+    }
+
+    private fun showCategoryPicker() {
+        val app = requireActivity().application as LessApp
+        val options = arrayOf(
+            getString(R.string.photo_category_normal),
+            getString(R.string.photo_category_live)
+        )
+        val checked = if (app.preferences.photoCategory == PhotoCategory.LIVE) 1 else 0
+        MaterialAlertDialogBuilder(requireContext())
+            .setTitle(R.string.photo_category_title)
+            .setSingleChoiceItems(options, checked) { dialog, which ->
+                dialog.dismiss()
+                val target = if (which == 1) PhotoCategory.LIVE else PhotoCategory.NORMAL
+                if (app.preferences.photoCategory == target) return@setSingleChoiceItems
+                app.preferences.photoCategory = target
+                viewModel.load(force = true)
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
     }
 
     private fun applyBucket(bucket: MediaBucket?, app: LessApp) {
@@ -162,7 +184,7 @@ class PhotoHomeFragment : Fragment() {
 
     private fun settingsSignature(): String {
         val prefs = (requireActivity().application as LessApp).preferences
-        return "${prefs.groupSize}-${prefs.browseMode}-${prefs.favoritesOnly}"
+        return "${prefs.groupSize}-${prefs.browseMode}-${prefs.favoritesOnly}-${prefs.photoCategory}"
     }
 
     private fun setupInsets() {
@@ -190,6 +212,13 @@ class PhotoHomeFragment : Fragment() {
         val preferences = (requireActivity().application as LessApp).preferences
         val albumLabel = preferences.photoBucketName?.takeIf { it.isNotBlank() }
             ?: getString(R.string.album_default)
+        binding.categoryName.text = getString(
+            if (preferences.photoCategory == PhotoCategory.LIVE) {
+                R.string.photo_category_live
+            } else {
+                R.string.photo_category_normal
+            }
+        )
         binding.albumName.text = albumLabel
         binding.albumPill.contentDescription =
             getString(R.string.album_pill_desc, albumLabel)
@@ -206,6 +235,8 @@ class PhotoHomeFragment : Fragment() {
             binding.emptyMessage.setText(
                 when {
                     state.exhausted -> R.string.photo_all_viewed
+                    preferences.photoCategory == PhotoCategory.LIVE ->
+                        R.string.photo_category_live_empty
                     preferences.favoritesOnly -> R.string.favorites_only_empty
                     preferences.photoBucketId != null -> R.string.album_empty_message
                     else -> R.string.photo_empty_message

@@ -10,6 +10,11 @@ enum class BrowseMode {
     RANDOM, SEQUENTIAL
 }
 
+/** 照片模式浏览哪一类：普通照片 / Live 图。 */
+enum class PhotoCategory {
+    NORMAL, LIVE
+}
+
 class AppPreferences(context: Context) {
 
     private val prefs = context.getSharedPreferences("less_settings", Context.MODE_PRIVATE)
@@ -75,11 +80,23 @@ class AppPreferences(context: Context) {
             prefs.edit().putBoolean(KEY_FAVORITES_ONLY, value).apply()
         }
 
-    /** 组的持久化键：收藏模式和普通模式分开存，互不干扰。 */
+    /** 照片模式只看普通照片还是只看 Live 图。 */
+    var photoCategory: PhotoCategory
+        get() = runCatching {
+            PhotoCategory.valueOf(
+                prefs.getString(KEY_PHOTO_CATEGORY, PhotoCategory.NORMAL.name)
+                    ?: PhotoCategory.NORMAL.name
+            )
+        }.getOrDefault(PhotoCategory.NORMAL)
+        set(value) {
+            prefs.edit().putString(KEY_PHOTO_CATEGORY, value.name).apply()
+        }
+
+    /** 组的持久化键：收藏模式、照片类型、浏览模式各存一份，互不干扰。 */
     val groupKey: String get() = groupKeyFor(browseMode)
 
     fun groupKeyFor(mode: BrowseMode): String =
-        mode.name + if (favoritesOnly) "_fav" else ""
+        mode.name + (if (favoritesOnly) "_fav" else "") + "_" + photoCategory.name
 
     /** 当前选择的相册（MediaStore BUCKET_ID），null 表示系统相册的全部照片。 */
     var photoBucketId: String?
@@ -138,6 +155,7 @@ class AppPreferences(context: Context) {
 
         private const val KEY_GROUP_SIZE = "group_size"
         private const val KEY_FAVORITES_ONLY = "favorites_only"
+        private const val KEY_PHOTO_CATEGORY = "photo_category"
         private const val KEY_EXPAND_RADIUS = "expand_radius"
         private const val KEY_DOUBLE_TAP = "double_tap"
         private const val KEY_BROWSE_MODE = "browse_mode"

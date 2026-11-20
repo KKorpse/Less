@@ -1,10 +1,13 @@
 package com.kkorpse.less.data
 
+import android.content.Context
 import com.kkorpse.less.prefs.AppPreferences
 import com.kkorpse.less.prefs.BrowseMode
 import com.kkorpse.less.prefs.BrowseStore
+import com.kkorpse.less.prefs.PhotoCategory
 
 class PhotoGroupBuilder(
+    private val context: Context,
     private val repository: MediaRepository,
     private val preferences: AppPreferences,
     private val store: BrowseStore
@@ -33,6 +36,17 @@ class PhotoGroupBuilder(
         }
         return repository.loadPhotos(preferences.photoBucketId).map { photos ->
             createGroup(photos)
+        }
+    }
+
+    /**
+     * 按「普通照片 / Live 图」筛选。识别结果会缓存，只有新增照片需要重新读文件头。
+     */
+    private suspend fun filterByCategory(photos: List<MediaItem>): List<MediaItem> {
+        val live = LivePhotoDetector.scan(context, photos)
+        return when (preferences.photoCategory) {
+            PhotoCategory.LIVE -> photos.filter { live.containsKey(it.uri.toString()) }
+            PhotoCategory.NORMAL -> photos.filterNot { live.containsKey(it.uri.toString()) }
         }
     }
 

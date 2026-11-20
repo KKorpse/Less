@@ -67,6 +67,10 @@
     <string name="settings_favorites_only">只看收藏的图片</string>
     <string name="settings_favorites_only_hint">照片模式只浏览「收藏」里的图片；这里的删除等于移出收藏，照片会变回普通照片</string>
     <string name="favorites_only_empty">收藏里还没有照片</string>
+    <string name="photo_category_title">选择照片类型</string>
+    <string name="photo_category_normal">普通照片</string>
+    <string name="photo_category_live">Live 图</string>
+    <string name="photo_category_live_empty">没有识别到 Live 图</string>
     <string name="photo_all_viewed">这个相册的照片都看过了\n去「统计 → 重置浏览记录」可以重新开始</string>
     <string name="review_subtitle">请确认需要删除的照片</string>
     <string name="review_subtitle_count">共标记 %1$d 张，默认全部勾选，点图片可以取消</string>

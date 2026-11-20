@@ -16,6 +16,7 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
     private val app = application as LessApp
     private val repository = MediaRepository(application, app.browseStore)
     private val groupBuilder = PhotoGroupBuilder(
+        application,
         repository,
         app.preferences,
         app.browseStore
@@ -104,8 +105,10 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun expand(page: FocusPage.Photo, onDone: (Int) -> Unit) {
         if (expanding) return
-        // 收藏模式只浏览收藏，展开会拉进普通照片，直接不生效。
-        if (app.preferences.favoritesOnly) {
+        // 收藏模式 / Live 图分组只浏览对应的照片，展开会拉进别的类型，直接不生效。
+        if (app.preferences.favoritesOnly ||
+            app.preferences.photoCategory == com.kkorpse.less.prefs.PhotoCategory.LIVE
+        ) {
             onDone(0)
             return
         }

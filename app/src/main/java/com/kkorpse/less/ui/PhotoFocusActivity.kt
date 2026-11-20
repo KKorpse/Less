@@ -32,6 +32,7 @@ import com.kkorpse.less.data.MediaItem
 import com.kkorpse.less.data.PhotoFocusSession
 import com.kkorpse.less.prefs.BrowseMode
 import com.kkorpse.less.prefs.DoubleTapAction
+import com.kkorpse.less.prefs.PhotoCategory
 import com.kkorpse.less.databinding.ActivityPhotoFocusBinding
 import com.kkorpse.less.util.Format
 import com.kkorpse.less.util.PhotoColorResolver
@@ -265,8 +266,13 @@ class PhotoFocusActivity : AppCompatActivity() {
      * 展开在随机模式下才有意义：顺序模式下相邻的那几张本来就在组里。
      * 收藏页（autoNextGroup=false）没有"组"的概念，也不显示。
      */
-    private fun canExpand(): Boolean = viewModel.autoNextGroup && !favoritesMode &&
-        (application as LessApp).preferences.browseMode == BrowseMode.RANDOM
+    private fun canExpand(): Boolean {
+        val preferences = (application as LessApp).preferences
+        // Live 图分组里「展开」会拉进普通照片，直接不显示。
+        return viewModel.autoNextGroup && !favoritesMode &&
+            preferences.browseMode == BrowseMode.RANDOM &&
+            preferences.photoCategory == PhotoCategory.NORMAL
+    }
 
     /** 只看收藏：照片模式只浏览收藏，删除等于移出收藏。 */
     private val favoritesMode: Boolean
