@@ -61,14 +61,6 @@ class BrowseStore(context: Context) {
         }
     }
 
-    /** 启动时用现存媒体校准浏览记录：已经不存在的照片/视频从记录里去掉。 */
-    fun pruneViewed(existingPhotos: Set<String>, existingVideos: Set<String>) {
-        val photosChanged = viewedPhotos.retainAll(existingPhotos)
-        val videosChanged = viewedVideos.retainAll(existingVideos)
-        if (photosChanged) persistViewed(false)
-        if (videosChanged) persistViewed(true)
-    }
-
     /** 删除后把这它从浏览记录里去掉：查看数跟着减，才不会超过现存总数。 */
     fun unmarkViewed(uri: Uri, isVideo: Boolean) {
         val set = if (isVideo) viewedVideos else viewedPhotos
