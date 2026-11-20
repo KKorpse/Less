@@ -61,6 +61,12 @@ class BrowseStore(context: Context) {
         }
     }
 
+    /** 删除后把这它从浏览记录里去掉：查看数跟着减，才不会超过现存总数。 */
+    fun unmarkViewed(uri: Uri, isVideo: Boolean) {
+        val set = if (isVideo) viewedVideos else viewedPhotos
+        if (set.remove(uri.toString())) persistViewed(isVideo)
+    }
+
     fun isViewed(uri: Uri, isVideo: Boolean): Boolean =
         (if (isVideo) viewedVideos else viewedPhotos).contains(uri.toString())
 

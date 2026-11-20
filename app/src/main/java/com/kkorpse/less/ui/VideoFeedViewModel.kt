@@ -144,7 +144,10 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
 
     fun markBatchDeleted() {
         if (pending.isEmpty()) return
-        pending.forEach { app.browseStore.onTrashed(true) }
+        pending.forEach {
+            app.browseStore.onTrashed(true)
+            app.browseStore.unmarkViewed(it.uri, true)
+        }
         deleted += pending
         pending.clear()
         busy = false
@@ -157,6 +160,8 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
         deleted.forEach {
             videos.add(it)
             app.browseStore.onRestored(true)
+            // 撤回删除：这条又回来了，重新计入「查看」。
+            app.browseStore.markViewed(it.uri, true)
         }
         deleted.clear()
         busy = false
