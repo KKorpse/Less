@@ -54,8 +54,13 @@ class FavoriteController(
                 onResult(Request(listOf(item), true), false)
                 return@post
             }
-            store?.rememberFavoriteCopy(item.uri, copy)
-            store?.setFavorite(copy, true)
+            val browseStore = store
+            browseStore?.rememberFavoriteCopy(item.uri, copy)
+            browseStore?.setFavorite(copy, true)
+            // 原图如果看过，副本也算看过：否则收藏（原图进回收站）会让「查看」莫名变少。
+            if (browseStore?.isViewed(item.uri, false) == true) {
+                browseStore.markViewed(copy, false)
+            }
             // 原图先留着，组尾确认删除时一起清理。
             store?.addPendingCleanup(item.uri)
             Diagnostics.recordFavorite("copied ${item.name} -> $copy")
