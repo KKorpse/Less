@@ -5,6 +5,8 @@ import android.util.AttributeSet
 import android.view.GestureDetector
 import android.view.LayoutInflater
 import android.view.MotionEvent
+import android.view.View
+import android.view.ViewConfiguration
 import android.widget.FrameLayout
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.GridLayoutManager
@@ -12,9 +14,14 @@ import coil3.dispose
 import coil3.load
 import coil3.request.allowHardware
 import coil3.request.crossfade
+import androidx.media3.common.Player
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.ProgressiveMediaSource
 import com.github.chrisbanes.photoview.PhotoView
 import com.kkorpse.less.Diagnostics
 import com.kkorpse.less.R
+import com.kkorpse.less.data.LivePhotoDetector
+import com.kkorpse.less.data.LiveVideoSource
 import com.kkorpse.less.data.MediaItem
 import com.kkorpse.less.databinding.ItemPhotoFocusBinding
 import com.kkorpse.less.databinding.ItemPhotoReviewBinding
@@ -53,6 +60,15 @@ class DeckCardView @JvmOverloads constructor(
 
     /** 收藏模式的汇总卡片：文案从「删除」改成「移出收藏」。 */
     private var favoritesMode = false
+
+    /** Live 图长按播放用的播放器和触摸跟踪。 */
+    private var livePlayer: ExoPlayer? = null
+    private var playingLive = false
+    private var downX = 0f
+    private var downY = 0f
+    private val touchSlop = ViewConfiguration.get(context).scaledTouchSlop
+    private val longPressTimeout = ViewConfiguration.getLongPressTimeout().toLong()
+    private val longPressRunnable = Runnable { startLivePlayback() }
 
     /** 当前绑定的页；同一个对象重复 bind 会直接跳过，避免重复解码。 */
     var page: FocusPage? = null
@@ -133,13 +149,84 @@ class DeckCardView @JvmOverloads constructor(
     }
 
     fun dispose() {
+        stopLivePlayback()
+        livePlayer?.release()
+        livePlayer = null
         photoCard.photo.dispose()
     }
 
-    override fun dispatchTouchEvent(ev: MotionEvent): Boolean =
-        if (touchEnabled) super.dispatchTouchEvent(ev) else false
+    override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (!touchEnabled) return false
+        when (ev.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                downX = ev.x
+                downY = ev.y
+                if (canPlayLive()) postDelayed(longPressRunnable, longPressTimeout)
+            }
+
+            MotionEvent.ACTION_MOVE -> {
+                if (kotlin.math.abs(ev.x - downX) > touchSlop ||
+                    kotlin.math.abs(ev.y - downY) > touchSlop
+                ) {
+                    cancelLiveLongPress()
+                }
+            }
+
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                cancelLiveLongPress()
+                stopLivePlayback()
+            }
+        }
+        return super.dispatchTouchEvent(ev)
+    }
+
+    private fun cancelLiveLongPress() {
+        removeCallbacks(longPressRunnable)
+    }
+
+    private fun canPlayLive(): Boolean {
+        val item = (page as? FocusPage.Photo)?.item ?: return false
+        return LivePhotoDetector.videoLengthOf(context, item.uri) > 0
+    }
+
+    /** 长按播放内嵌在 JPEG 末尾的那段视频。 */
+    private fun startLivePlayback() {
+        val item = (page as? FocusPage.Photo)?.item ?: return
+        val length = LivePhotoDetector.videoLengthOf(context, item.uri)
+        if (length <= 0L) return
+        val player = livePlayer ?: ExoPlayer.Builder(context).build().apply {
+            repeatMode = Player.REPEAT_MODE_ONE
+            livePlayer = this
+        }
+        val source = ProgressiveMediaSource.Factory(
+            LiveVideoSource.factory(context, item.sizeBytes, length)
+        ).createMediaSource(
+            androidx.media3.common.MediaItem.Builder()
+                .setUri(item.uri)
+                .setMimeType("video/mp4")
+                .build()
+        )
+        photoCard.livePlayer.player = player
+        photoCard.livePlayer.visibility = View.VISIBLE
+        player.setMediaSource(source)
+        player.prepare()
+        player.playWhenReady = true
+        playingLive = true
+    }
+
+    private fun stopLivePlayback() {
+        if (!playingLive) return
+        playingLive = false
+        photoCard.livePlayer.visibility = View.GONE
+        photoCard.livePlayer.player = null
+        livePlayer?.let {
+            it.pause()
+            it.clearMediaItems()
+        }
+    }
 
     private fun bindPhoto(item: MediaItem) {
+        stopLivePlayback()
         reviewCard.root.isVisible = false
         photoCard.root.isVisible = true
         clearTransform()
@@ -225,6 +312,7 @@ class DeckCardView @JvmOverloads constructor(
     }
 
     private fun clear() {
+        stopLivePlayback()
         dispose()
         photoCard.root.isVisible = false
         reviewCard.root.isVisible = false

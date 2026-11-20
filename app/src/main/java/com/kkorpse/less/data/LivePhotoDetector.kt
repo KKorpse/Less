@@ -20,8 +20,8 @@ import kotlinx.coroutines.withContext
 object LivePhotoDetector {
 
     private const val PREFS = "less_live_photo"
-    private const val KEY_LIVE = "live_entries"
-    private const val KEY_SCANNED = "scanned_ids"
+    private const val KEY_LIVE = "live_entries_v2"
+    private const val KEY_SCANNED = "scanned_ids_v2"
     private const val HEADER_BYTES = 16 * 1024
 
     private var liveCache: MutableMap<String, Long>? = null
@@ -104,24 +104,51 @@ object LivePhotoDetector {
             }
         }.getOrNull() ?: return 0
 
-        return parseMotionPhotoLength(head)
+        val length = parseMotionPhotoLength(head)
+        if (length <= 0L) return 0
+        // 关键校验：文件末尾必须真的是一段 MP4（`ftyp` box），
+        // 避免"只是带了 OPPO 标记"的普通照片被当成 Live 图。
+        if (!hasMp4Tail(context, item.uri, item.sizeBytes, length)) return 0
+        return length
+    }
+
+    /** 读文件末尾 videoLength 字节处的 box 类型，确认是 MP4。 */
+    private fun hasMp4Tail(
+        context: Context,
+        uri: Uri,
+        fileSize: Long,
+        videoLength: Long
+    ): Boolean {
+        if (fileSize <= videoLength || videoLength < 1024L) return false
+        val offset = fileSize - videoLength
+        return runCatching {
+            context.contentResolver.openFileDescriptor(uri, "r")?.use { pfd ->
+                java.io.FileInputStream(pfd.fileDescriptor).channel.use { channel ->
+                    channel.position(offset + 4)
+                    val buffer = java.nio.ByteBuffer.allocate(4)
+                    channel.read(buffer) == 4 &&
+                        String(buffer.array(), Charsets.ISO_8859_1) == "ftyp"
+                }
+            } ?: false
+        }.getOrDefault(false)
     }
 
     /** 从文件头的 XMP 里解析视频段长度；不是动态照片返回 0。 */
     internal fun parseMotionPhotoLength(head: String): Long {
         if (!head.contains("MotionPhoto")) return 0
-        val marked = head.contains("Camera:MotionPhoto=\"1\"") ||
+        // XMP 里属性可能写成 `MotionPhoto="1"` 或 `MotionPhoto= "1"`，都认。
+        val marked = Regex("MotionPhoto\\s*=\\s*[\"']1[\"']").containsMatchIn(head) ||
             head.contains("OpCamera:MotionPhotoOwner")
         if (!marked) return 0
 
-        Regex("OpCamera:VideoLength=\"(\\d+)\"").find(head)?.let {
+        Regex("OpCamera:VideoLength\\s*=\\s*[\"'](\\d+)[\"']").find(head)?.let {
             return it.groupValues[1].toLongOrNull() ?: 0L
         }
-        Regex("GCamera:MicroVideoOffset=\"(\\d+)\"").find(head)?.let {
+        Regex("GCamera:MicroVideoOffset\\s*=\\s*[\"'](\\d+)[\"']").find(head)?.let {
             return it.groupValues[1].toLongOrNull() ?: 0L
         }
         // 标准格式：Container:Directory 里 MotionPhoto 那一段的长度（通常就是最大的那个）。
-        return Regex("Item:Length=\"(\\d+)\"").findAll(head)
+        return Regex("Item:Length\\s*=\\s*[\"'](\\d+)[\"']").findAll(head)
             .mapNotNull { it.groupValues[1].toLongOrNull() }
             .filter { it > 0 }
             .maxOrNull() ?: 0L
