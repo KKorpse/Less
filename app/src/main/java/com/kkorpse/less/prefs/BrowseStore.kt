@@ -70,11 +70,16 @@ class BrowseStore(context: Context) {
     fun isViewed(uri: Uri, isVideo: Boolean): Boolean =
         (if (isVideo) viewedVideos else viewedPhotos).contains(uri.toString())
 
-    /** 收藏副本没有自己的浏览记录时，按原图算：避免「查看」比实际少一截。 */
+    /**
+     * 「看过」的综合判断（统计页用）：
+     * 1. 自己有记录；2. 收藏副本/原图任意一方有记录；3. 它本身是收藏（能收藏说明看过）。
+     */
     fun isViewedDeep(uri: Uri, isVideo: Boolean): Boolean {
         if (isViewed(uri, isVideo)) return true
-        val original = originalOfCopy(uri) ?: return false
-        return isViewed(original, isVideo)
+        if (isFavorite(uri)) return true
+        originalOfCopy(uri)?.let { if (isViewed(it, isVideo)) return true }
+        favoriteCopyOf(uri)?.let { if (isViewed(it, isVideo)) return true }
+        return false
     }
 
     fun viewedUris(isVideo: Boolean): Set<String> =
@@ -194,9 +199,18 @@ class BrowseStore(context: Context) {
         if (changed) prefs.edit().putStringSet(KEY_PENDING_CLEANUP, set).apply()
     }
 
-    private fun copiesJson(): JSONObject = runCatching {
-        JSONObject(prefs.getString(KEY_FAVORITE_COPIES, "{}") ?: "{}")
-    }.getOrElse { JSONObject() }
+    /** 反序列化一次就缓存住，统计页要按副本反查原图，不能每次都解析 JSON。 */
+    @Volatile
+    private var copiesCache: JSONObject? = null
+
+    private fun copiesJson(): JSONObject {
+        copiesCache?.let { return it }
+        val json = runCatching {
+            JSONObject(prefs.getString(KEY_FAVORITE_COPIES, "{}") ?: "{}")
+        }.getOrElse { JSONObject() }
+        copiesCache = json
+        return json
+    }
 
     /**
      * 当前这一组照片的 URI（保持顺序）。有它之后，退出照片专注或重开 App

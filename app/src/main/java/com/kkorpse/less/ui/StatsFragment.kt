@@ -21,6 +21,7 @@ import com.kkorpse.less.util.AccessMode
 import com.kkorpse.less.util.Format
 import com.kkorpse.less.util.MediaAccess
 import com.kkorpse.less.util.dp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
 class StatsFragment : Fragment() {
@@ -28,6 +29,7 @@ class StatsFragment : Fragment() {
     private var _binding: FragmentStatsBinding? = null
     private val binding get() = _binding!!
 
+    private var loadJob: Job? = null
     private var photoProgress: RectProgressDrawable? = null
     private var videoProgress: RectProgressDrawable? = null
 
@@ -56,18 +58,10 @@ class StatsFragment : Fragment() {
         binding.resetRow.setOnClickListener { confirmReset() }
     }
 
-    override fun onStart() {
-        super.onStart()
-        loadStats()
-    }
-
     override fun onResume() {
         super.onResume()
         if (!isHidden) loadStats()
     }
-
-    /** 切到统计 tab 时由 MainActivity 主动刷新，避免依赖隐藏/显示回调的时序。 */
-    fun reload() = loadStats()
 
     override fun onHiddenChanged(hidden: Boolean) {
         super.onHiddenChanged(hidden)
@@ -91,29 +85,33 @@ class StatsFragment : Fragment() {
 
     fun loadStats() {
         if (_binding == null) return
-        viewLifecycleOwner.lifecycleScope.launch {
+        // 同一时间只跑一次，切来切去不会叠出一堆查询。
+        loadJob?.cancel()
+        loadJob = viewLifecycleOwner.lifecycleScope.launch {
             if (_binding == null) return@launch
             binding.loading.isVisible = true
             binding.partialNote.isVisible =
                 MediaAccess.mode(requireContext()) == AccessMode.PARTIAL
 
             val app = requireActivity().application as LessApp
-            // 总数包含收藏目录里的照片（收藏只是换了个位置，照片还在）；
-            // 已经复制到收藏、但原图还没清理的那一张只算一份。
-            val pendingCleanup = app.browseStore.pendingCleanupUris()
-            val items = MediaRepository(requireContext()).loadEverything()
-                .getOrElse { emptyList() }
-                .filterNot { it.uri.toString() in pendingCleanup }
+            val store = app.browseStore
+            // 只查 URI（单列投影），比把整行读出来快很多；总数包含收藏目录。
+            val (photoUris, videoUris) = MediaRepository(requireContext()).listAllUris()
+            // 已经复制到收藏、原图还没清理的那一张只算一份。
+            val pendingCleanup = store.pendingCleanupUris()
+            val photos = photoUris.filterNot { it in pendingCleanup }
+            val videos = videoUris.filterNot { it in pendingCleanup }
             if (_binding == null) return@launch
-
-            val photos = items.filter { !it.isVideo }
-            val videos = items.filter { it.isVideo }
 
             // 「查看」= 现存媒体里看过的数量（浏览记录和现存媒体求交集）：
             // 看过就算、重复看不重复计、删掉的自动不算，所以永远不会超过总数。
             // 收藏副本可能没有自己的浏览记录，按原图算，避免「查看」比实际少。
-            val photoViewed = photos.count { app.browseStore.isViewedDeep(it.uri, false) }
-            val videoViewed = videos.count { app.browseStore.isViewedDeep(it.uri, true) }
+            val photoViewed = photos.count {
+                store.isViewedDeep(android.net.Uri.parse(it), false)
+            }
+            val videoViewed = videos.count {
+                store.isViewedDeep(android.net.Uri.parse(it), true)
+            }
 
             // 进度条跟卡片上的两个数字保持一致：查看 / 总数（累计看过 ÷ 当前相册张数），
             // 看过的比相册张数还多（删过照片）时按 100% 显示。

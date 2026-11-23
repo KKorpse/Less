@@ -190,7 +190,10 @@ class PhotoFocusViewModel(application: Application) : AndroidViewModel(applicati
         if (uris.isEmpty()) return
         pending.filter { it.item.uri in uris }.forEach {
             app.browseStore.onTrashed(false)
-            // 删掉的这张不再计入「查看」，查看数永远不会超过现存总数。
+            // 删掉的这张不再计入「查看」；如果它有收藏副本，标记转给副本。
+            app.browseStore.favoriteCopyOf(it.item.uri)?.let { copy ->
+                app.browseStore.markViewed(copy, false)
+            }
             app.browseStore.unmarkViewed(it.item.uri, false)
         }
         pending.removeAll { it.item.uri in uris }

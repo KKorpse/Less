@@ -146,6 +146,10 @@ class VideoFeedViewModel(application: Application) : AndroidViewModel(applicatio
         if (pending.isEmpty()) return
         pending.forEach {
             app.browseStore.onTrashed(true)
+            // 标记转给收藏副本（如果有），否则查看数会和总数对不上。
+            app.browseStore.favoriteCopyOf(it.uri)?.let { copy ->
+                app.browseStore.markViewed(copy, true)
+            }
             app.browseStore.unmarkViewed(it.uri, true)
         }
         deleted += pending

@@ -95,6 +95,38 @@ class MediaRepository(
         }
     }
 
+    /**
+     * 统计页专用：只拿「照片 URI 集合 / 视频 URI 集合」（包含收藏目录），
+     * 只投影 _ID 一列，比把每行所有字段都读出来快得多。
+     */
+    suspend fun listAllUris(): Pair<Set<String>, Set<String>> = withContext(Dispatchers.IO) {
+        Pair(
+            queryUris(MediaStore.Images.Media.EXTERNAL_CONTENT_URI),
+            queryUris(MediaStore.Video.Media.EXTERNAL_CONTENT_URI)
+        )
+    }
+
+    private fun queryUris(collection: Uri): Set<String> {
+        val projection = arrayOf(MediaStore.MediaColumns._ID)
+        val result = HashSet<String>()
+        runCatching {
+            context.contentResolver.query(
+                collection,
+                projection,
+                baseSelection(includeFavorites = true),
+                null,
+                null
+            )?.use { cursor ->
+                while (cursor.moveToNext()) {
+                    result += ContentUris
+                        .withAppendedId(collection, cursor.getLong(0))
+                        .toString()
+                }
+            }
+        }
+        return result
+    }
+
     /** 读取所有含照片的相册（按文件夹分组），用于首页的相册切换。 */
     suspend fun loadBuckets(): Result<List<MediaBucket>> = withContext(Dispatchers.IO) {
         try {

@@ -111,6 +111,12 @@ class MainActivity : AppCompatActivity() {
         render()
     }
 
+    override fun onPause() {
+        super.onPause()
+        // 切换 tab 的淡出动画带了 withEndAction，晚于这个时刻执行会踩到状态丢失。
+        if (this::binding.isInitialized) binding.tabContainer.animate().cancel()
+    }
+
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         outState.putString(STATE_TAB, currentTab.name)
@@ -236,15 +242,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         fun commitTab() {
+            // 动画回调可能晚于 onSaveInstanceState，这时候提交事务会直接崩。
+            if (isFinishing || isDestroyed ||
+                !lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)
+            ) {
+                return
+            }
             val tx = supportFragmentManager.beginTransaction()
             photoFragment?.let { if (it !== target) tx.hide(it) }
             videoFragment?.let { if (it !== target) tx.hide(it) }
             statsFragment?.let { if (it !== target) tx.hide(it) }
             tx.show(target)
-            tx.commit()
+            tx.commitAllowingStateLoss()
             visibleTab = tab
-            // 统计页的查看/删除数会随照片专注变化，切过去时主动刷一次。
-            (target as? StatsFragment)?.reload()
         }
 
         if (force || !binding.tabContainer.isVisible) {
