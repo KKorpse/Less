@@ -682,18 +682,42 @@ class PhotoFocusActivity : AppCompatActivity() {
             advanceGroupNow()
             return
         }
-        val cleanup = (application as LessApp).browseStore.pendingCleanupUris()
+        // 先把已经不存在（刚被删掉/已经进回收站）的原图从"待清理"里剔除，
+        // 否则会对同一批照片再弹一次确认框。
+        val cleanup = aliveCleanupUris()
         if (cleanup.isNotEmpty()) {
-            val uris = cleanup.mapNotNull { runCatching { Uri.parse(it) }.getOrNull() }
-            if (uris.isNotEmpty()) {
-                cleanupOnly = true
-                pendingCleanupUris = uris
-                viewModel.setBatchBusy(true)
-                batchController.requestUris(uris, trash = true)
-                return
-            }
+            cleanupOnly = true
+            pendingCleanupUris = cleanup
+            viewModel.setBatchBusy(true)
+            batchController.requestUris(cleanup, trash = true)
+            return
         }
         advanceGroupNow()
+    }
+
+    /** 「待清理的原图」里还真实存在的那些；不存在的顺手从记录里去掉，不再打扰用户。 */
+    private fun aliveCleanupUris(): List<Uri> {
+        val store = (application as LessApp).browseStore
+        val all = store.pendingCleanupUris()
+        if (all.isEmpty()) return emptyList()
+        val alive = ArrayList<Uri>(all.size)
+        val gone = ArrayList<Uri>()
+        all.forEach { value ->
+            val uri = runCatching { Uri.parse(value) }.getOrNull()
+            if (uri == null) return@forEach
+            val exists = runCatching {
+                contentResolver.query(
+                    uri,
+                    arrayOf(android.provider.MediaStore.MediaColumns._ID),
+                    null,
+                    null,
+                    null
+                )?.use { it.moveToFirst() } == true
+            }.getOrDefault(false)
+            if (exists) alive += uri else gone += uri
+        }
+        if (gone.isNotEmpty()) store.removePendingCleanup(gone)
+        return alive
     }
 
     private fun advanceGroupNow() {
