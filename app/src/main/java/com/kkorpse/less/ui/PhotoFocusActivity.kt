@@ -656,6 +656,8 @@ class PhotoFocusActivity : AppCompatActivity() {
         val store = (application as LessApp).browseStore
         // 已收藏的原图不展示，但一起送进回收站，保持「收藏=移动」的语义。
         val selectedUris = selected.map { it.item.uri }.toSet()
+        // 待清理的原图（收藏留下的）一起送进回收站。全部记下来，
+        // 成功之后要把它们都从「待清理」里移除，否则组尾会再弹一次确认框。
         lastCleanupUris = store.pendingCleanupUris()
             .mapNotNull { runCatching { Uri.parse(it) }.getOrNull() }
             .filter { it !in selectedUris }
@@ -720,7 +722,9 @@ class PhotoFocusActivity : AppCompatActivity() {
         }
         if (trash) {
             viewModel.completeBatchDelete(lastDeleteItems)
-            (application as LessApp).browseStore.removePendingCleanup(lastCleanupUris)
+            val store = (application as LessApp).browseStore
+            // 这次请求里的所有 URI 都已经进回收站：选中的 + 待清理的原图。
+            store.removePendingCleanup(lastCleanupUris + lastDeleteItems.map { it.uri })
             lastDeleteItems = emptyList()
             lastCleanupUris = emptyList()
             Toast.makeText(this, R.string.batch_trash_success, Toast.LENGTH_SHORT).show()
