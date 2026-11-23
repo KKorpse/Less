@@ -70,6 +70,13 @@ class BrowseStore(context: Context) {
     fun isViewed(uri: Uri, isVideo: Boolean): Boolean =
         (if (isVideo) viewedVideos else viewedPhotos).contains(uri.toString())
 
+    /** 收藏副本没有自己的浏览记录时，按原图算：避免「查看」比实际少一截。 */
+    fun isViewedDeep(uri: Uri, isVideo: Boolean): Boolean {
+        if (isViewed(uri, isVideo)) return true
+        val original = originalOfCopy(uri) ?: return false
+        return isViewed(original, isVideo)
+    }
+
     fun viewedUris(isVideo: Boolean): Set<String> =
         (if (isVideo) viewedVideos else viewedPhotos).toSet()
 

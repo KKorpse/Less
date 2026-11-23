@@ -111,10 +111,9 @@ class StatsFragment : Fragment() {
 
             // 「查看」= 现存媒体里看过的数量（浏览记录和现存媒体求交集）：
             // 看过就算、重复看不重复计、删掉的自动不算，所以永远不会超过总数。
-            val viewedPhotoUris = app.browseStore.viewedUris(false)
-            val viewedVideoUris = app.browseStore.viewedUris(true)
-            val photoViewed = photos.count { it.uri.toString() in viewedPhotoUris }
-            val videoViewed = videos.count { it.uri.toString() in viewedVideoUris }
+            // 收藏副本可能没有自己的浏览记录，按原图算，避免「查看」比实际少。
+            val photoViewed = photos.count { app.browseStore.isViewedDeep(it.uri, false) }
+            val videoViewed = videos.count { app.browseStore.isViewedDeep(it.uri, true) }
 
             // 进度条跟卡片上的两个数字保持一致：查看 / 总数（累计看过 ÷ 当前相册张数），
             // 看过的比相册张数还多（删过照片）时按 100% 显示。
