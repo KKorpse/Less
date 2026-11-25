@@ -66,9 +66,7 @@ class PhotoFocusActivity : AppCompatActivity() {
     private var lastCleanupUris: List<Uri> = emptyList()
     private var expandRequesting = false
     private var leftForGallery = false
-    /** 正在单独清理「已收藏照片的原图」（组尾没有待删照片时也会跑一次）。 */
-    private var cleanupOnly = false
-    private var pendingCleanupUris: List<Uri> = emptyList()
+
     private var lastPreloadPosition = -1
     private var pages: List<FocusPage> = emptyList()
     private lateinit var favoriteController: FavoriteController
@@ -677,34 +675,25 @@ class PhotoFocusActivity : AppCompatActivity() {
      * 进入下一组前，先把「已收藏照片的原图」清理掉（收藏是复制一份，不清理就会有两份）。
      * 原图不是我们建的，系统会弹一次「移入回收站」的确认框。
      */
+    /**
+     * 进入下一组。
+     *
+     * 注意：已收藏照片的「原图清理」只在用户点「确认删除」时一起做（跟批量删除同一个弹窗），
+     * 组尾不再单独发起确认框——否则用户会看到"刚删完又让我确认一次"，还会把当前组跳过。
+     */
     private fun advanceAfterGroup() {
-        if (batchController.isBusy || cleanupOnly) {
-            advanceGroupNow()
-            return
-        }
-        // 先把已经不存在（刚被删掉/已经进回收站）的原图从"待清理"里剔除，
-        // 否则会对同一批照片再弹一次确认框。
-        val cleanup = aliveCleanupUris()
-        if (cleanup.isNotEmpty()) {
-            cleanupOnly = true
-            pendingCleanupUris = cleanup
-            viewModel.setBatchBusy(true)
-            batchController.requestUris(cleanup, trash = true)
-            return
-        }
+        pruneGoneCleanup()
         advanceGroupNow()
     }
 
-    /** 「待清理的原图」里还真实存在的那些；不存在的顺手从记录里去掉，不再打扰用户。 */
-    private fun aliveCleanupUris(): List<Uri> {
+    /** 把已经不存在的「待清理原图」静默剔除，避免以后又对它们弹框。 */
+    private fun pruneGoneCleanup() {
         val store = (application as LessApp).browseStore
         val all = store.pendingCleanupUris()
-        if (all.isEmpty()) return emptyList()
-        val alive = ArrayList<Uri>(all.size)
+        if (all.isEmpty()) return
         val gone = ArrayList<Uri>()
         all.forEach { value ->
-            val uri = runCatching { Uri.parse(value) }.getOrNull()
-            if (uri == null) return@forEach
+            val uri = runCatching { Uri.parse(value) }.getOrNull() ?: return@forEach
             val exists = runCatching {
                 contentResolver.query(
                     uri,
@@ -714,10 +703,9 @@ class PhotoFocusActivity : AppCompatActivity() {
                     null
                 )?.use { it.moveToFirst() } == true
             }.getOrDefault(false)
-            if (exists) alive += uri else gone += uri
+            if (!exists) gone += uri
         }
         if (gone.isNotEmpty()) store.removePendingCleanup(gone)
-        return alive
     }
 
     private fun advanceGroupNow() {
@@ -729,16 +717,6 @@ class PhotoFocusActivity : AppCompatActivity() {
     }
 
     private fun handleBatchResult(trash: Boolean, success: Boolean) {
-        if (cleanupOnly) {
-            cleanupOnly = false
-            viewModel.setBatchBusy(false)
-            if (success) {
-                (application as LessApp).browseStore.removePendingCleanup(pendingCleanupUris)
-            }
-            pendingCleanupUris = emptyList()
-            advanceGroupNow()
-            return
-        }
         if (!success) {
             viewModel.setBatchBusy(false)
             refreshUndo()
